@@ -5,21 +5,88 @@
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
-    <h2>MyDM Chrome Bridge</h2>
-    <p>
-      Mở ứng dụng MyDM trước khi tải. Với link công khai, bấm chuột phải → Tải
-      link bằng MyDM.
-    </p>
-    <button id="ping">Kiểm tra kết nối</button>
+    <h2>MyDM Chrome Bridge <span class="version">v0.2</span></h2>
+
+    <!-- Diagnostics -->
+    <div class="section">
+      <h3>Chẩn đoán kết nối</h3>
+      <button id="ping" class="btn-primary">Kiểm tra kết nối</button>
+      <div id="diagnostics" class="diagnostics" style="display:none">
+        <div class="diag-row">
+          <span>Extension → Native host:</span>
+          <span id="diag-host" class="diag-status">—</span>
+        </div>
+        <div class="diag-row">
+          <span>Phiên bản giao thức:</span>
+          <span id="diag-version">—</span>
+        </div>
+      </div>
+    </div>
+
     <hr />
-    <label><input type="checkbox" id="automatic" /> Tự chuyển lượt tải</label>
-    <p>
-      Chỉ bật cho tên miền có link tải trực tiếp công khai. Không dùng cho link
-      một lần, POST hay phiên đăng nhập.
-    </p>
-    <textarea id="domains" placeholder="example.com, cdn.example.com"></textarea
-    ><button id="save">Lưu</button>
-    <p id="status" role="status"></p>
+
+    <!-- Mode selection -->
+    <div class="section">
+      <h3>Chế độ nhận link</h3>
+      <label class="radio-label">
+        <input type="radio" name="mode" value="off" checked />
+        <span><strong>Tắt</strong> — Chỉ tải bằng chuột phải</span>
+      </label>
+      <label class="radio-label">
+        <input type="radio" name="mode" value="ask" />
+        <span><strong>Hỏi trước</strong> — Ghi nhận tác vụ, bạn xác nhận trong MyDM</span>
+      </label>
+      <label class="radio-label">
+        <input type="radio" name="mode" value="auto" />
+        <span><strong>Tự chuyển</strong> — Tự động chuyển theo quy tắc bên dưới</span>
+      </label>
+    </div>
+
+    <hr />
+
+    <!-- Domain rules -->
+    <div class="section">
+      <h3>Quy tắc tên miền</h3>
+      <label class="field-label">
+        Website được phép (mỗi dòng một tên miền):
+        <textarea id="allowDomains" placeholder="example.com&#10;cdn.example.com" rows="3"></textarea>
+      </label>
+      <label class="field-label">
+        Website loại trừ:
+        <textarea id="blockDomains" placeholder="accounts.google.com" rows="2"></textarea>
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" id="allowSubdomains" />
+        Áp dụng cho cả tên miền phụ (*.example.com)
+      </label>
+    </div>
+
+    <hr />
+
+    <!-- Session/Cookie settings -->
+    <div class="section">
+      <h3>Phiên đăng nhập Chrome</h3>
+      <p class="help-text">
+        Cho phép MyDM dùng phiên đăng nhập Chrome để tải file cần xác thực.
+        Chỉ bật cho website bạn tin tưởng.
+      </p>
+      <label class="field-label">
+        Website được cấp phiên (mỗi dòng một tên miền):
+        <textarea id="sessionSites" placeholder="drive.google.com&#10;dropbox.com" rows="3"></textarea>
+      </label>
+      <button id="grantCookies" class="btn-secondary">Cấp quyền cookie</button>
+      <button id="revokeCookies" class="btn-danger">Thu hồi quyền cookie</button>
+      <p id="cookieStatus" class="status-text"></p>
+    </div>
+
+    <hr />
+
+    <div class="section">
+      <button id="save" class="btn-primary full-width">Lưu cấu hình</button>
+    </div>
+
+    <p id="status" role="status" class="main-status"></p>
+
     <script src="popup.js"></script>
   </body>
 </html>

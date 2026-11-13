@@ -15,7 +15,7 @@ fn main() -> anyhow::Result<()> {
         connections: 4,
         limit_kib: 0,
     })?;
-    let t = s.add(&args[2], "result.bin", None, false)?;
+    let t = s.add(&args[2], "result.bin", None, false, None, None, "manual")?;
     let stop = s.start()?;
     let start = Instant::now();
     let mut paused = false;

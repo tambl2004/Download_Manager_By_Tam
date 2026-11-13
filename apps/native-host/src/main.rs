@@ -3,22 +3,25 @@ use std::io::{self, Read, Write};
 fn handle(v: Value) -> anyhow::Result<Value> {
     let s = mydm_engine::Store::user()?;
     match v["op"].as_str().unwrap_or("") {
-        "ping" => Ok(json!({"ok":true,"version":1})),
+        "ping" => Ok(json!({"ok":true,"version":2})),
         "add" => {
             let t = s.add(
                 v["url"].as_str().unwrap_or(""),
                 v["name"].as_str().unwrap_or(""),
                 v["id"].as_str(),
                 v["hold"].as_bool().unwrap_or(true),
+                v["cookies"].as_str(),
+                v["referer"].as_str(),
+                v["source"].as_str().unwrap_or("chrome"),
             )?;
-            Ok(json!({"ok":true,"id":t.id,"state":t.state}))
+            Ok(json!({"ok":true,"id":t.id,"state":t.state,"version":2}))
         }
         "resume" | "cancel" => {
             s.action(
                 v["id"].as_str().unwrap_or(""),
                 v["op"].as_str().unwrap_or(""),
             )?;
-            Ok(json!({"ok":true}))
+            Ok(json!({"ok":true,"version":2}))
         }
         _ => anyhow::bail!("Unknown operation"),
     }
@@ -45,7 +48,7 @@ fn main() {
         let value = match result {
             Ok(v) => v,
             Err(_) => {
-                json!({"ok":false,"error":"Không tiếp nhận được tác vụ. Kiểm tra URL, trạng thái và quyền ghi dữ liệu."})
+                json!({"ok":false,"error":"Không tiếp nhận được tác vụ. Kiểm tra URL, trạng thái và quyền ghi dữ liệu.","version":2})
             }
         };
         let Ok(data) = serde_json::to_vec(&value) else {

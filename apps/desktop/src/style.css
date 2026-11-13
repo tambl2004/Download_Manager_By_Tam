@@ -294,7 +294,17 @@ body {
 .col-status { width: 110px; }
 .col-speed { width: 100px; text-align: right; }
 .col-eta { width: 90px; text-align: right; }
+.col-source { width: 90px; }
 .col-date { width: 120px; }
+
+/* Source badge */
+.source-badge {
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+.source-badge.chrome { color: #0078d4; }
+.source-badge.manual { color: #666; }
 
 /* File type icons */
 .file-icon {

@@ -15,6 +15,9 @@ type Task = {
     done: number;
     created: number;
     ranges: [number, number][];
+    source: string;
+    source_host: string;
+    content_disposition_name: string | null;
 };
 type Config = {
     folder: string;
@@ -26,7 +29,7 @@ type Config = {
 /* ── Helpers ── */
 const stateLabels: Record<string, string> = {
     queued: "Đang chờ",
-    held: "Chờ xác nhận Chrome",
+    held: "Chờ xác nhận",
     running: "Đang tải",
     pausing: "Đang dừng…",
     paused: "Tạm dừng",
@@ -76,17 +79,12 @@ const FILE_ICONS: Record<FileCategory, string> = {
     program: "⚙️", image: "🖼️", other: "📎",
 };
 
-const CATEGORY_LABELS: Record<FileCategory, string> = {
-    archive: "Dữ liệu nén", document: "Tài liệu", music: "Âm nhạc",
-    video: "Video", program: "Chương trình", image: "Hình ảnh", other: "Khác",
-};
-
 function getFileCategory(name: string): FileCategory {
     const ext = name.split(".").pop()?.toLowerCase() ?? "";
     return EXT_MAP[ext] ?? "other";
 }
 
-/* ── Sidebar Category Tree Items ── */
+/* ── Sidebar items ── */
 type SidebarFilter =
     | "all"
     | "cat:archive" | "cat:document" | "cat:music" | "cat:program" | "cat:video" | "cat:image" | "cat:other"
@@ -249,6 +247,13 @@ function App() {
     const totalSpeed = Object.values(rates).reduce((a, b) => a + b, 0);
     const activeCount = tasks.filter((t) => t.state === "running").length;
 
+    /* Source label */
+    const sourceLabel = (t: Task) => {
+        if (t.source === "chrome") return "Chrome";
+        if (t.source === "manual") return "Thủ công";
+        return "—";
+    };
+
     return (
         <div className="app" onClick={() => setContextMenu(null)}>
             {/* ── Menu bar ── */}
@@ -410,6 +415,7 @@ function App() {
                                         <th className="col-status">Trạng thái</th>
                                         <th className="col-speed">Tốc độ</th>
                                         <th className="col-eta">Còn lại</th>
+                                        <th className="col-source">Nguồn</th>
                                         <th className="col-date">Ngày tải</th>
                                     </tr>
                                 </thead>
@@ -453,6 +459,11 @@ function App() {
                                                 </td>
                                                 <td className="col-speed">{speed > 0 ? bytes(speed) + "/s" : ""}</td>
                                                 <td className="col-eta">{eta > 0 ? formatETA(eta) : ""}</td>
+                                                <td className="col-source" title={t.source_host || ""}>
+                                                    <span className={`source-badge ${t.source || "manual"}`}>
+                                                        {t.source === "chrome" ? "🌐" : "📥"} {sourceLabel(t)}
+                                                    </span>
+                                                </td>
                                                 <td className="col-date">{formatDate(t.created)}</td>
                                             </tr>
                                         );
@@ -480,10 +491,17 @@ function App() {
                             <dl className="detail-grid">
                                 <dt>Tên tệp:</dt>
                                 <dd>{selectedTask.name}</dd>
-                                <dt>URL:</dt>
-                                <dd>{selectedTask.url}</dd>
+                                {selectedTask.content_disposition_name && selectedTask.content_disposition_name !== selectedTask.name && (
+                                    <>
+                                        <dt>Tên gốc (server):</dt>
+                                        <dd>{selectedTask.content_disposition_name}</dd>
+                                    </>
+                                )}
                                 <dt>Trạng thái:</dt>
-                                <dd className={`status-text ${selectedTask.state}`}>{stateLabels[selectedTask.state]}</dd>
+                                <dd className={`status-text ${selectedTask.state}`}>
+                                    {stateLabels[selectedTask.state]}
+                                    {selectedTask.state === "held" && " — Bấm Tiếp tục để bắt đầu tải hoặc Hủy để từ chối."}
+                                </dd>
                                 <dt>Kích thước:</dt>
                                 <dd>{selectedTask.total ? bytes(selectedTask.total) : "Chưa rõ"}</dd>
                                 <dt>Đã tải được:</dt>
@@ -492,6 +510,11 @@ function App() {
                                 <dd>{(rates[selectedTask.id] ?? 0) > 0 ? bytes(rates[selectedTask.id]) + "/s" : "—"}</dd>
                                 <dt>Số kết nối:</dt>
                                 <dd>{selectedTask.ranges.length || 1} phần</dd>
+                                <dt>Nguồn:</dt>
+                                <dd>
+                                    {sourceLabel(selectedTask)}
+                                    {selectedTask.source_host && ` — ${selectedTask.source_host}`}
+                                </dd>
                                 <dt>Thư mục:</dt>
                                 <dd>{selectedTask.folder}</dd>
                                 {selectedTask.error && selectedTask.state === "failed" && (
@@ -514,7 +537,7 @@ function App() {
                 </div>
                 <div className="statusbar-right">
                     {totalSpeed > 0 && <span>Tổng tốc độ: {bytes(totalSpeed)}/s</span>}
-                    <span>MyDM 0.1</span>
+                    <span>MyDM 0.2</span>
                 </div>
             </div>
 
@@ -594,9 +617,9 @@ function App() {
                                 />
                             </div>
                             <div className="form-group">
-                                <label>Tên tệp (tùy chọn)</label>
+                                <label>Tên tệp (tùy chọn — để trống sẽ lấy từ server)</label>
                                 <input
-                                    placeholder="Để trống sẽ lấy tên từ URL"
+                                    placeholder="Để trống sẽ lấy tên từ Content-Disposition hoặc URL"
                                     value={addName}
                                     onChange={(e) => setAddName(e.target.value)}
                                     onKeyDown={(e) => { if (e.key === "Enter") handleAdd(); }}
@@ -658,7 +681,7 @@ function App() {
                                 />
                             </div>
                             <p style={{ fontSize: "11px", color: "#888", marginTop: "8px" }}>
-                                0 = không giới hạn tốc độ. Cấu hình kết nối và tốc độ áp dụng cho tác vụ mới.
+                                0 = không giới hạn tốc độ. Cấu hình áp dụng cho tác vụ mới.
                             </p>
                         </div>
                         <div className="modal-footer">

@@ -6,7 +6,8 @@ fn list(s: tauri::State<'_, Store>) -> Result<Vec<Task>, String> {
 }
 #[tauri::command]
 fn add(s: tauri::State<'_, Store>, url: String, name: String) -> Result<Task, String> {
-    s.add(&url, &name, None, false).map_err(|e| e.to_string())
+    s.add(&url, &name, None, false, None, None, "manual")
+        .map_err(|e| e.to_string())
 }
 #[tauri::command]
 fn action(s: tauri::State<'_, Store>, id: String, action: String) -> Result<(), String> {

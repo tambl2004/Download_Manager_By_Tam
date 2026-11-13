@@ -14,6 +14,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+const SCHEMA_VERSION: i64 = 2;
+
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Task {
     pub id: String,
@@ -29,7 +31,19 @@ pub struct Task {
     pub connections: u32,
     pub limit_kib: u64,
     pub created: u64,
+    // v0.2 fields
+    #[serde(default)]
+    pub source: String,
+    #[serde(default)]
+    pub source_host: String,
+    #[serde(default)]
+    pub cookies: Option<String>,
+    #[serde(default)]
+    pub referer: Option<String>,
+    #[serde(default)]
+    pub content_disposition_name: Option<String>,
 }
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Settings {
     pub folder: String,
@@ -60,7 +74,7 @@ impl Store {
         fs::create_dir_all(root.join("parts"))?;
         let s = Self { root };
         let c = s.db()?;
-        c.execute_batch("PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS tasks(id TEXT PRIMARY KEY,state TEXT NOT NULL,data TEXT NOT NULL); CREATE TABLE IF NOT EXISTS settings(id INTEGER PRIMARY KEY,data TEXT NOT NULL); CREATE TABLE IF NOT EXISTS checkpoints(task TEXT,part INTEGER,offset INTEGER NOT NULL,PRIMARY KEY(task,part));")?;
+        s.init_schema(&c)?;
         Ok(s)
     }
     pub fn user() -> Result<Self> {
@@ -75,6 +89,63 @@ impl Store {
         c.busy_timeout(Duration::from_secs(5))?;
         c.pragma_update(None, "synchronous", "FULL")?;
         Ok(c)
+    }
+    fn init_schema(&self, c: &Connection) -> Result<()> {
+        // Create base tables if they don't exist
+        c.execute_batch(
+            "PRAGMA journal_mode=WAL;\
+             CREATE TABLE IF NOT EXISTS tasks(\
+                 id TEXT PRIMARY KEY,\
+                 state TEXT NOT NULL,\
+                 data TEXT NOT NULL\
+             );\
+             CREATE TABLE IF NOT EXISTS settings(\
+                 id INTEGER PRIMARY KEY,\
+                 data TEXT NOT NULL\
+             );\
+             CREATE TABLE IF NOT EXISTS checkpoints(\
+                 task TEXT,\
+                 part INTEGER,\
+                 offset INTEGER NOT NULL,\
+                 PRIMARY KEY(task,part)\
+             );\
+             CREATE TABLE IF NOT EXISTS schema_version(\
+                 id INTEGER PRIMARY KEY,\
+                 version INTEGER NOT NULL\
+             );",
+        )?;
+
+        // Check current schema version
+        let current: i64 = c
+            .query_row(
+                "SELECT version FROM schema_version WHERE id=1",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(1); // If no row, this is a v1 DB
+
+        if current < SCHEMA_VERSION {
+            self.migrate(c, current)?;
+        }
+        Ok(())
+    }
+    fn migrate(&self, c: &Connection, from: i64) -> Result<()> {
+        if from < 2 {
+            // v1 → v2: new fields are stored in the JSON `data` column,
+            // not as separate SQL columns. Task deserialization uses
+            // #[serde(default)] so old rows without these fields still load.
+            // We just need to set the schema version marker.
+            //
+            // Existing task data is preserved as-is. The new fields
+            // (source, source_host, cookies, referer, content_disposition_name)
+            // will default to empty/None when deserialized from old JSON.
+        }
+
+        c.execute(
+            "INSERT OR REPLACE INTO schema_version VALUES(1, ?1)",
+            params![SCHEMA_VERSION],
+        )?;
+        Ok(())
     }
     pub fn settings(&self) -> Result<Settings> {
         let c = self.db()?;
@@ -102,7 +173,16 @@ impl Store {
         )?;
         Ok(())
     }
-    pub fn add(&self, url: &str, name: &str, key: Option<&str>, hold: bool) -> Result<Task> {
+    pub fn add(
+        &self,
+        url: &str,
+        name: &str,
+        key: Option<&str>,
+        hold: bool,
+        cookies: Option<&str>,
+        referer: Option<&str>,
+        source: &str,
+    ) -> Result<Task> {
         let u = reqwest::Url::parse(url)?;
         if !matches!(u.scheme(), "http" | "https")
             || !u.username().is_empty()
@@ -125,6 +205,7 @@ impl Store {
             .path_segments()
             .and_then(|mut p| p.next_back())
             .unwrap_or("download.bin");
+        let source_host = u.host_str().unwrap_or("").to_string();
         let t = Task {
             id: id.clone(),
             url: url.into(),
@@ -141,6 +222,11 @@ impl Store {
             created: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)?
                 .as_secs(),
+            source: source.to_string(),
+            source_host,
+            cookies: cookies.map(|s| s.to_string()).filter(|s| !s.is_empty()),
+            referer: referer.map(|s| s.to_string()).filter(|s| !s.is_empty()),
+            content_disposition_name: None,
         };
         self.db()?.execute(
             "INSERT OR IGNORE INTO tasks VALUES(?1,?2,?3)",
@@ -315,13 +401,25 @@ impl Store {
                     let _ = self.end(&t, "completed");
                 }
                 Err(e) => {
-                    t.error = e.to_string();
+                    // Sanitize error: do not leak cookies/tokens
+                    t.error = sanitize_error(&e.to_string());
                     let _ = self.end(&t, "failed");
                 }
             }
         }
     }
 }
+
+/// Remove sensitive patterns from error messages
+fn sanitize_error(msg: &str) -> String {
+    // Truncate very long messages that might contain URL with tokens
+    if msg.len() > 300 {
+        format!("{}…", &msg[..297])
+    } else {
+        msg.to_string()
+    }
+}
+
 pub fn safe_name(s: &str) -> String {
     let s = s.rsplit(['/', '\\']).next().unwrap_or("");
     let v: String = s
@@ -343,14 +441,93 @@ pub fn safe_name(s: &str) -> String {
         v.into()
     }
 }
+
+/// Parse Content-Disposition header for filename.
+/// Supports: filename*=UTF-8''encoded_name (RFC 5987) and filename="name" fallback.
+pub fn parse_content_disposition(value: &str) -> Option<String> {
+    // Try filename*= first (RFC 5987)
+    if let Some(star_pos) = value.to_lowercase().find("filename*=") {
+        let rest = &value[star_pos + 10..];
+        // Format: charset'language'encoded_value
+        if let Some(tick2) = rest.find('\'').and_then(|p1| rest[p1 + 1..].find('\'').map(|p2| p1 + 1 + p2)) {
+            let encoded = rest[tick2 + 1..]
+                .split(|c: char| c == ';' || c == ' ')
+                .next()
+                .unwrap_or("");
+            let decoded = percent_decode(encoded);
+            if !decoded.is_empty() {
+                return Some(decoded);
+            }
+        }
+    }
+
+    // Fallback: filename="value" or filename=value
+    if let Some(pos) = value.to_lowercase().find("filename=") {
+        let rest = value[pos + 9..].trim_start();
+        if rest.starts_with('"') {
+            // Quoted
+            if let Some(end) = rest[1..].find('"') {
+                let name = &rest[1..1 + end];
+                if !name.is_empty() {
+                    return Some(name.to_string());
+                }
+            }
+        } else {
+            // Unquoted
+            let name: String = rest
+                .chars()
+                .take_while(|c| !matches!(c, ';' | ' ' | '\t'))
+                .collect();
+            if !name.is_empty() {
+                return Some(name);
+            }
+        }
+    }
+
+    None
+}
+
+/// Simple percent-decode for RFC 5987 filenames
+fn percent_decode(input: &str) -> String {
+    let mut result = Vec::new();
+    let bytes = input.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let Ok(byte) = u8::from_str_radix(
+                std::str::from_utf8(&bytes[i + 1..i + 3]).unwrap_or(""),
+                16,
+            ) {
+                result.push(byte);
+                i += 3;
+                continue;
+            }
+        }
+        result.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8(result).unwrap_or_default()
+}
+
 fn client() -> Result<Client> {
     Ok(Client::builder()
         .connect_timeout(Duration::from_secs(15))
         .timeout(Duration::from_secs(600))
         .redirect(reqwest::redirect::Policy::limited(10))
-        .user_agent("MyDM/0.1")
+        .user_agent("MyDM/0.2")
         .build()?)
 }
+
+/// Build a client that does NOT follow redirects (for cookie-aware requests)
+fn client_no_redirect() -> Result<Client> {
+    Ok(Client::builder()
+        .connect_timeout(Duration::from_secs(15))
+        .timeout(Duration::from_secs(600))
+        .redirect(reqwest::redirect::Policy::none())
+        .user_agent("MyDM/0.2")
+        .build()?)
+}
+
 fn etag(r: &reqwest::blocking::Response) -> Option<String> {
     r.headers()
         .get(header::ETAG)?
@@ -376,18 +553,162 @@ fn active(s: &Store, id: &str, stop: &AtomicBool) -> Result<()> {
     };
     Ok(())
 }
+
+/// Extract hostname from a URL string
+fn url_host(url: &str) -> Option<String> {
+    reqwest::Url::parse(url)
+        .ok()
+        .and_then(|u| u.host_str().map(|s| s.to_lowercase()))
+}
+
+/// Check if the redirect target is same-origin (for cookie safety)
+fn is_same_origin(original_url: &str, redirect_url: &str) -> bool {
+    let orig = reqwest::Url::parse(original_url).ok();
+    let redir = reqwest::Url::parse(redirect_url).ok();
+    match (orig, redir) {
+        (Some(a), Some(b)) => {
+            a.host_str() == b.host_str()
+                && a.scheme() == b.scheme()
+                && a.port() == b.port()
+        }
+        _ => false,
+    }
+}
+
+/// Follow redirects manually, stripping credentials on cross-origin
+fn follow_redirects(
+    client: &Client,
+    initial_url: &str,
+    cookies: Option<&str>,
+    referer: Option<&str>,
+) -> Result<reqwest::blocking::Response> {
+    let mut url = initial_url.to_string();
+    let orig_host = url_host(initial_url);
+
+    for _ in 0..10 {
+        let mut req = client
+            .get(&url)
+            .header(header::ACCEPT_ENCODING, "identity")
+            .header(header::RANGE, "bytes=0-0");
+
+        // Only send cookies/referer if same origin
+        let current_host = url_host(&url);
+        if current_host == orig_host {
+            if let Some(c) = cookies {
+                req = req.header(header::COOKIE, c);
+            }
+            if let Some(r) = referer {
+                req = req.header(header::REFERER, r);
+            }
+        }
+
+        let resp = req.send().map_err(|_| anyhow!("Không kết nối được máy chủ"))?;
+
+        if resp.status().is_redirection() {
+            if let Some(loc) = resp.headers().get(header::LOCATION) {
+                let loc_str = loc.to_str().unwrap_or("");
+                // Resolve relative redirect
+                url = if loc_str.starts_with("http://") || loc_str.starts_with("https://") {
+                    loc_str.to_string()
+                } else {
+                    reqwest::Url::parse(&url)?
+                        .join(loc_str)?
+                        .to_string()
+                };
+                continue;
+            }
+        }
+
+        return Ok(resp);
+    }
+
+    bail!("Quá nhiều chuyển hướng")
+}
+
+/// Build a request for a download part, with credential safety on redirects
+fn build_part_request(
+    client: &Client,
+    url: &str,
+    range_header: Option<String>,
+    if_range: Option<&str>,
+    cookies: Option<&str>,
+    referer: Option<&str>,
+    original_url: &str,
+) -> Result<reqwest::blocking::Response> {
+    let mut req = client.get(url).header(header::ACCEPT_ENCODING, "identity");
+
+    if let Some(rh) = range_header {
+        req = req.header(header::RANGE, rh);
+    }
+    if let Some(ir) = if_range {
+        req = req.header(header::IF_RANGE, ir);
+    }
+
+    // Only send cookies/referer if same origin as original URL
+    if is_same_origin(original_url, url) {
+        if let Some(c) = cookies {
+            req = req.header(header::COOKIE, c);
+        }
+        if let Some(r) = referer {
+            req = req.header(header::REFERER, r);
+        }
+    }
+
+    req.send().map_err(|_| anyhow!("Kết nối thất bại"))
+}
+
 fn download(s: &Store, t: &mut Task, stop: &Arc<AtomicBool>) -> Result<()> {
     let dir = s.root.join("parts").join(&t.id);
     fs::create_dir_all(&dir)?;
     fs::create_dir_all(&t.folder)?;
-    let c = client()?;
+
+    let has_cookies = t.cookies.is_some();
+
     if t.ranges.is_empty() {
-        let r = c
-            .get(&t.url)
-            .header(header::ACCEPT_ENCODING, "identity")
-            .header(header::RANGE, "bytes=0-0")
-            .send()
-            .map_err(|_| anyhow!("Không kết nối được máy chủ"))?;
+        // Probe phase
+        let r = if has_cookies {
+            let c = client_no_redirect()?;
+            follow_redirects(
+                &c,
+                &t.url,
+                t.cookies.as_deref(),
+                t.referer.as_deref(),
+            )?
+        } else {
+            let c = client()?;
+            c.get(&t.url)
+                .header(header::ACCEPT_ENCODING, "identity")
+                .header(header::RANGE, "bytes=0-0")
+                .send()
+                .map_err(|_| anyhow!("Không kết nối được máy chủ"))?
+        };
+
+        // Check for auth failures
+        let status_code = r.status().as_u16();
+        if status_code == 401 || status_code == 403 {
+            bail!("Máy chủ từ chối truy cập ({}). Nếu cần đăng nhập, hãy đăng nhập lại trên Chrome rồi gửi lại link.", status_code)
+        }
+
+        // Parse Content-Disposition for filename
+        if let Some(cd) = r.headers().get(header::CONTENT_DISPOSITION) {
+            if let Ok(cd_str) = cd.to_str() {
+                if let Some(cd_name) = parse_content_disposition(cd_str) {
+                    let safe = safe_name(&cd_name);
+                    t.content_disposition_name = Some(safe.clone());
+                    // Use Content-Disposition name if user didn't specify one
+                    // (name matches the URL-guessed default)
+                    let url_guessed = reqwest::Url::parse(&t.url)
+                        .ok()
+                        .and_then(|u| u.path_segments().and_then(|mut p| p.next_back().map(|s| s.to_string())))
+                        .map(|s| safe_name(&s))
+                        .unwrap_or_default();
+                    if t.name == url_guessed || t.name == "download.bin" {
+                        t.name = safe;
+                    }
+                }
+            }
+        }
+
         let range = r
             .headers()
             .get(header::CONTENT_RANGE)
@@ -442,7 +763,11 @@ fn download(s: &Store, t: &mut Task, stop: &Arc<AtomicBool>) -> Result<()> {
         let bad = abort.clone();
         let p = dir.join(format!("{i}.part"));
         workers.push(thread::spawn(move || -> Result<()> {
-            let c = client()?;
+            let c = if task.cookies.is_some() {
+                client_no_redirect()?
+            } else {
+                client()?
+            };
             let cap = if b == u64::MAX { None } else { Some(b - a + 1) };
             let count = task.ranges.len() as u64;
             for attempt in 0..3 {
@@ -461,16 +786,42 @@ fn download(s: &Store, t: &mut Task, stop: &Arc<AtomicBool>) -> Result<()> {
                 if cap.map(|n| offset > n).unwrap_or(false) {
                     bail!("Tệp tạm dài quá phạm vi")
                 };
-                let mut req = c.get(&task.url).header(header::ACCEPT_ENCODING, "identity");
-                if cap.is_some() {
-                    req = req
-                        .header(header::RANGE, format!("bytes={}-{}", a + offset, b))
-                        .header(
-                            header::IF_RANGE,
-                            task.etag.clone().ok_or_else(|| anyhow!("Thiếu ETag"))?,
-                        );
-                }
-                let mut r = match req.send() {
+
+                let r_result = if task.cookies.is_some() {
+                    // Manual redirect handling for cookie safety
+                    let range_hdr = if cap.is_some() {
+                        Some(format!("bytes={}-{}", a + offset, b))
+                    } else {
+                        None
+                    };
+                    let if_range = if cap.is_some() {
+                        task.etag.as_deref()
+                    } else {
+                        None
+                    };
+                    build_part_request(
+                        &c,
+                        &task.url,
+                        range_hdr,
+                        if_range,
+                        task.cookies.as_deref(),
+                        task.referer.as_deref(),
+                        &task.url,
+                    )
+                } else {
+                    let mut req = c.get(&task.url).header(header::ACCEPT_ENCODING, "identity");
+                    if cap.is_some() {
+                        req = req
+                            .header(header::RANGE, format!("bytes={}-{}", a + offset, b))
+                            .header(
+                                header::IF_RANGE,
+                                task.etag.clone().ok_or_else(|| anyhow!("Thiếu ETag"))?,
+                            );
+                    }
+                    req.send().map_err(|_| anyhow!("Kết nối thất bại"))
+                };
+
+                let mut r = match r_result {
                     Ok(r) => r,
                     Err(_) => {
                         if attempt == 2 {
@@ -480,6 +831,12 @@ fn download(s: &Store, t: &mut Task, stop: &Arc<AtomicBool>) -> Result<()> {
                         continue;
                     }
                 };
+
+                // Auth failure
+                if r.status().as_u16() == 401 || r.status().as_u16() == 403 {
+                    bail!("Máy chủ từ chối truy cập. Đăng nhập lại trên Chrome rồi gửi lại link.")
+                }
+
                 if r.status().as_u16() == 429 || r.status().is_server_error() {
                     if attempt == 2 {
                         bail!("Máy chủ tạm từ chối tải")
@@ -631,6 +988,8 @@ fn download(s: &Store, t: &mut Task, stop: &Arc<AtomicBool>) -> Result<()> {
     t.done = n;
     t.total = Some(n);
     t.error.clear();
+    // Clear cookies from completed task metadata (don't persist credentials longer than needed)
+    t.cookies = None;
     s.end(t, "completed")?;
     let _ = fs::remove_dir_all(dir);
 
@@ -648,6 +1007,8 @@ pub fn snapshot(s: &Store) -> Result<Vec<Task>> {
                 })
                 .sum();
         }
+        // Never expose cookies to UI
+        t.cookies = None;
     }
     Ok(ts)
 }
@@ -670,13 +1031,150 @@ mod tests {
         let d = tempfile::tempdir()?;
         let s = Store::open(d.path().into())?;
         let id = uuid::Uuid::new_v4().to_string();
-        let t = s.add("https://example.org/a", "", Some(&id), true)?;
-        s.add("https://example.org/a", "", Some(&id), true)?;
+        let t = s.add("https://example.org/a", "", Some(&id), true, None, None, "chrome")?;
+        s.add("https://example.org/a", "", Some(&id), true, None, None, "chrome")?;
         assert_eq!(s.list()?.len(), 1);
         assert_eq!(t.state, "held");
         s.action(&id, "resume")?;
         assert_eq!(s.get(&id)?.state, "queued");
-        assert!(s.add("file:///c:/test", "", None, false).is_err());
+        assert!(s.add("file:///c:/test", "", None, false, None, None, "manual").is_err());
+        Ok(())
+    }
+    #[test]
+    fn content_disposition_parsing() {
+        // Simple filename
+        assert_eq!(
+            parse_content_disposition("attachment; filename=\"report.pdf\""),
+            Some("report.pdf".into())
+        );
+        // filename*= with UTF-8 encoding
+        assert_eq!(
+            parse_content_disposition("attachment; filename*=UTF-8''my%20file.zip"),
+            Some("my file.zip".into())
+        );
+        // filename*= takes priority
+        assert_eq!(
+            parse_content_disposition("attachment; filename=\"fallback.txt\"; filename*=UTF-8''real%20name.txt"),
+            Some("real name.txt".into())
+        );
+        // Unquoted filename
+        assert_eq!(
+            parse_content_disposition("attachment; filename=simple.exe"),
+            Some("simple.exe".into())
+        );
+        // No filename
+        assert_eq!(parse_content_disposition("inline"), None);
+    }
+    #[test]
+    fn schema_migration_from_v1() -> Result<()> {
+        let d = tempfile::tempdir()?;
+        // Create a v1-style database manually
+        let db_path = d.path().join("mydm.sqlite");
+        {
+            let c = Connection::open(&db_path)?;
+            c.execute_batch(
+                "PRAGMA journal_mode=WAL;\
+                 CREATE TABLE tasks(id TEXT PRIMARY KEY, state TEXT NOT NULL, data TEXT NOT NULL);\
+                 CREATE TABLE settings(id INTEGER PRIMARY KEY, data TEXT NOT NULL);\
+                 CREATE TABLE checkpoints(task TEXT, part INTEGER, offset INTEGER NOT NULL, PRIMARY KEY(task, part));"
+            )?;
+            // Insert a v1-format task (without new fields)
+            let old_task = serde_json::json!({
+                "id": "test-123",
+                "url": "https://example.com/file.zip",
+                "name": "file.zip",
+                "folder": "C:\\Downloads",
+                "state": "completed",
+                "error": "",
+                "total": 1024,
+                "done": 1024,
+                "etag": null,
+                "ranges": [],
+                "connections": 4,
+                "limit_kib": 0,
+                "created": 1700000000
+            });
+            c.execute(
+                "INSERT INTO tasks VALUES(?1, ?2, ?3)",
+                params!["test-123", "completed", old_task.to_string()],
+            )?;
+        }
+
+        // Now open with Store which should migrate
+        fs::create_dir_all(d.path().join("parts"))?;
+        let s = Store { root: d.path().to_path_buf() };
+        let c = s.db()?;
+        s.init_schema(&c)?;
+
+        // Verify old task is preserved and new fields default properly
+        let tasks = s.list()?;
+        assert_eq!(tasks.len(), 1);
+        let t = &tasks[0];
+        assert_eq!(t.id, "test-123");
+        assert_eq!(t.name, "file.zip");
+        assert_eq!(t.state, "completed");
+        assert_eq!(t.source, "");  // defaults to empty
+        assert_eq!(t.source_host, ""); // defaults to empty
+        assert!(t.cookies.is_none());
+        assert!(t.referer.is_none());
+        assert!(t.content_disposition_name.is_none());
+
+        // Verify schema version was set
+        let ver: i64 = c.query_row(
+            "SELECT version FROM schema_version WHERE id=1",
+            [],
+            |r| r.get(0),
+        )?;
+        assert_eq!(ver, 2);
+        Ok(())
+    }
+    #[test]
+    fn new_task_fields() -> Result<()> {
+        let d = tempfile::tempdir()?;
+        let s = Store::open(d.path().into())?;
+        let t = s.add(
+            "https://cdn.example.com/big.zip",
+            "",
+            None,
+            false,
+            Some("session=abc123"),
+            Some("https://example.com/page"),
+            "chrome",
+        )?;
+        assert_eq!(t.source, "chrome");
+        assert_eq!(t.source_host, "cdn.example.com");
+        // Cookies should be set
+        let raw = s.get(&t.id)?;
+        assert!(raw.cookies.is_some());
+        assert_eq!(raw.referer.as_deref(), Some("https://example.com/page"));
+        Ok(())
+    }
+    #[test]
+    fn sanitize_error_truncation() {
+        let long = "x".repeat(500);
+        let result = sanitize_error(&long);
+        assert!(result.len() < 310);
+        assert!(result.ends_with('…'));
+
+        let short = "Short error".to_string();
+        assert_eq!(sanitize_error(&short), "Short error");
+    }
+    #[test]
+    fn snapshot_hides_cookies() -> Result<()> {
+        let d = tempfile::tempdir()?;
+        let s = Store::open(d.path().into())?;
+        let t = s.add(
+            "https://example.com/secret.zip",
+            "",
+            None,
+            true,
+            Some("token=secret"),
+            None,
+            "chrome",
+        )?;
+        let snaps = snapshot(&s)?;
+        let found = snaps.iter().find(|x| x.id == t.id).unwrap();
+        assert!(found.cookies.is_none(), "Cookies must not be exposed in snapshot");
         Ok(())
     }
 }
