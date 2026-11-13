@@ -1,0 +1,3 @@
+# Phát triển MyDM
+Đọc README.md, docs/specification.md và docs/verification.md trước khi sửa. Đây là source có triển khai, không phải skeleton. Windows là đích sản phẩm. Dùng Rust + Tauri/React và Chrome MV3; không thêm thu tiền hoặc activation.
+Không ghi nhận tính năng đã xong nếu chỉ có tài liệu. Giữ invariants: checkpoint sau sync; từ chối Range sai; không ghi đè file đích; host lưu held trước Chrome cancel; chỉ release sau cancel. Không log URL/cookie; không tự chạy file. Giữ lockfiles và chạy test HTTP, bridge, frontend build sau thay đổi liên quan. Mọi thay đổi giao thức, storage hoặc tính năng phải cập nhật đặc tả và README. Không sao chép tài nguyên IDM.

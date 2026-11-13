@@ -1,0 +1,19 @@
+{
+    "manifest_version": 3,
+    "name": "MyDM — Chrome Bridge",
+    "version": "0.1.0",
+    "description": "Gửi link HTTP/HTTPS đến MyDM trên Windows.",
+    "permissions": [
+        "nativeMessaging",
+        "downloads",
+        "contextMenus",
+        "storage"
+    ],
+    "background": {
+        "service_worker": "background.js",
+        "type": "module"
+    },
+    "action": {
+        "default_popup": "popup.html"
+    }
+}

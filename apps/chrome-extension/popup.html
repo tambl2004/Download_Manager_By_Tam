@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <h2>MyDM Chrome Bridge</h2>
+    <p>
+      Mở ứng dụng MyDM trước khi tải. Với link công khai, bấm chuột phải → Tải
+      link bằng MyDM.
+    </p>
+    <button id="ping">Kiểm tra kết nối</button>
+    <hr />
+    <label><input type="checkbox" id="automatic" /> Tự chuyển lượt tải</label>
+    <p>
+      Chỉ bật cho tên miền có link tải trực tiếp công khai. Không dùng cho link
+      một lần, POST hay phiên đăng nhập.
+    </p>
+    <textarea id="domains" placeholder="example.com, cdn.example.com"></textarea
+    ><button id="save">Lưu</button>
+    <p id="status" role="status"></p>
+    <script src="popup.js"></script>
+  </body>
+</html>

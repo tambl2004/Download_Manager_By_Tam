@@ -1,0 +1,8 @@
+[workspace]
+members = ["crates/engine", "apps/native-host", "apps/desktop/src-tauri"]
+default-members = ["crates/engine", "apps/native-host"]
+resolver = "2"
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
