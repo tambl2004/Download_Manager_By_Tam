@@ -170,7 +170,7 @@ body {
     z-index: 1010;
 }
 
-.menubar-has-sub:hover > .menubar-submenu {
+.menubar-has-sub:hover>.menubar-submenu {
     display: block;
 }
 
@@ -267,6 +267,29 @@ body {
     background: var(--border);
     margin: 4px 6px;
     align-self: stretch;
+}
+
+/* Small toolbar style */
+.toolbar.small {
+    padding: 3px 6px;
+    gap: 2px;
+}
+
+.toolbar.small .toolbar-btn {
+    min-width: 52px;
+    padding: 3px 6px;
+    font-size: 11px;
+    gap: 2px;
+}
+
+.toolbar.small .toolbar-btn .icon {
+    width: 24px;
+    height: 24px;
+}
+
+.toolbar.small .toolbar-btn .icon img {
+    width: 24px;
+    height: 24px;
 }
 
 /* ===== MAIN CONTENT ===== */
@@ -1157,4 +1180,309 @@ body {
     .progress-fill {
         transition: none;
     }
+}
+
+/* ===== DARK MODE SUPPORT ===== */
+.app.dark-mode {
+    --bg: #1e1e1e;
+    --surface: #252526;
+    --text: #cccccc;
+    --text-secondary: #999999;
+    --border: #3c3c3c;
+    --border-light: #333333;
+    --toolbar-bg: #2d2d2d;
+    --toolbar-border: #3c3c3c;
+    --sidebar-bg: #252526;
+    --sidebar-selected: #094771;
+    --sidebar-hover: #2a2d2e;
+    --header-bg: #2d2d2d;
+    --row-hover: #2a2d2e;
+    --row-selected: #094771;
+    --menubar-bg: #2d2d2d;
+    background: #1e1e1e;
+    color: #cccccc;
+}
+
+.app.dark-mode .menubar,
+.app.dark-mode .toolbar,
+.app.dark-mode .sidebar,
+.app.dark-mode .content,
+.app.dark-mode .table-wrapper,
+.app.dark-mode .dl-table {
+    background: var(--surface);
+    color: var(--text);
+}
+
+.app.dark-mode .menubar {
+    background: #2d2d2d;
+    border-color: #3c3c3c;
+}
+
+.app.dark-mode .menubar-menu-btn {
+    color: #cccccc;
+}
+
+.app.dark-mode .menubar-menu-btn:hover,
+.app.dark-mode .menubar-menu-btn.active {
+    background: #094771;
+    color: #ffffff;
+}
+
+.app.dark-mode .menubar-dropdown,
+.app.dark-mode .menubar-submenu {
+    background: #2d2d2d;
+    border-color: #454545;
+    box-shadow: 2px 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.app.dark-mode .menubar-menu-item {
+    color: #cccccc;
+}
+
+.app.dark-mode .menubar-menu-item:hover {
+    background: #094771;
+    color: #ffffff;
+}
+
+.app.dark-mode .menubar-menu-divider {
+    background: #3c3c3c;
+}
+
+.app.dark-mode .toolbar {
+    background: #2d2d2d;
+    border-color: #3c3c3c;
+}
+
+.app.dark-mode .toolbar-btn {
+    color: #cccccc;
+}
+
+.app.dark-mode .toolbar-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: #555555;
+}
+
+.app.dark-mode .toolbar-sep {
+    background: #3c3c3c;
+}
+
+.app.dark-mode .sidebar {
+    background: #252526;
+    border-color: #3c3c3c;
+}
+
+.app.dark-mode .sidebar-header {
+    background: #2d2d2d;
+    color: #cccccc;
+    border-color: #3c3c3c;
+}
+
+.app.dark-mode .tree-item {
+    color: #cccccc;
+}
+
+.app.dark-mode .tree-item:hover {
+    background: #2a2d2e;
+}
+
+.app.dark-mode .tree-item.selected {
+    background: #094771;
+    color: #ffffff;
+}
+
+.app.dark-mode .tree-count {
+    color: #888888;
+}
+
+.app.dark-mode .dl-table thead th {
+    background: #2d2d2d;
+    color: #cccccc;
+    border-color: #3c3c3c;
+}
+
+.app.dark-mode .dl-table tbody tr.row-data {
+    border-color: #333333;
+    color: #cccccc;
+}
+
+.app.dark-mode .dl-table tbody tr.row-data:hover {
+    background: #2a2d2e;
+}
+
+.app.dark-mode .dl-table tbody tr.row-data.selected {
+    background: #094771;
+    color: #ffffff;
+}
+
+.app.dark-mode .dl-table tbody td {
+    border-color: #333333;
+}
+
+.app.dark-mode .row-empty td {
+    border-color: #282828;
+}
+
+.app.dark-mode .detail-panel {
+    background: #252526;
+    border-color: #3c3c3c;
+    color: #cccccc;
+}
+
+.app.dark-mode .statusbar {
+    background: #252526;
+    border-color: #3c3c3c;
+    color: #888888;
+}
+
+
+/* ===== DARK MODE SUPPORT ===== */
+.app.dark-mode {
+    --bg: #1e1e1e;
+    --surface: #252526;
+    --text: #cccccc;
+    --text-secondary: #999999;
+    --border: #3c3c3c;
+    --border-light: #333333;
+    --toolbar-bg: #2d2d2d;
+    --toolbar-border: #3c3c3c;
+    --sidebar-bg: #252526;
+    --sidebar-selected: #094771;
+    --sidebar-hover: #2a2d2e;
+    --header-bg: #2d2d2d;
+    --row-hover: #2a2d2e;
+    --row-selected: #094771;
+    --menubar-bg: #2d2d2d;
+    background: #1e1e1e;
+    color: #cccccc;
+}
+
+.app.dark-mode .menubar,
+.app.dark-mode .toolbar,
+.app.dark-mode .sidebar,
+.app.dark-mode .content,
+.app.dark-mode .table-wrapper,
+.app.dark-mode .dl-table {
+    background: var(--surface);
+    color: var(--text);
+}
+
+.app.dark-mode .menubar {
+    background: #2d2d2d;
+    border-color: #3c3c3c;
+}
+
+.app.dark-mode .menubar-menu-btn {
+    color: #cccccc;
+}
+
+.app.dark-mode .menubar-menu-btn:hover,
+.app.dark-mode .menubar-menu-btn.active {
+    background: #094771;
+    color: #ffffff;
+}
+
+.app.dark-mode .menubar-dropdown,
+.app.dark-mode .menubar-submenu {
+    background: #2d2d2d;
+    border-color: #454545;
+    box-shadow: 2px 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.app.dark-mode .menubar-menu-item {
+    color: #cccccc;
+}
+
+.app.dark-mode .menubar-menu-item:hover {
+    background: #094771;
+    color: #ffffff;
+}
+
+.app.dark-mode .menubar-menu-divider {
+    background: #3c3c3c;
+}
+
+.app.dark-mode .toolbar {
+    background: #2d2d2d;
+    border-color: #3c3c3c;
+}
+
+.app.dark-mode .toolbar-btn {
+    color: #cccccc;
+}
+
+.app.dark-mode .toolbar-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: #555555;
+}
+
+.app.dark-mode .toolbar-sep {
+    background: #3c3c3c;
+}
+
+.app.dark-mode .sidebar {
+    background: #252526;
+    border-color: #3c3c3c;
+}
+
+.app.dark-mode .sidebar-header {
+    background: #2d2d2d;
+    color: #cccccc;
+    border-color: #3c3c3c;
+}
+
+.app.dark-mode .tree-item {
+    color: #cccccc;
+}
+
+.app.dark-mode .tree-item:hover {
+    background: #2a2d2e;
+}
+
+.app.dark-mode .tree-item.selected {
+    background: #094771;
+    color: #ffffff;
+}
+
+.app.dark-mode .tree-count {
+    color: #888888;
+}
+
+.app.dark-mode .dl-table thead th {
+    background: #2d2d2d;
+    color: #cccccc;
+    border-color: #3c3c3c;
+}
+
+.app.dark-mode .dl-table tbody tr.row-data {
+    border-color: #333333;
+    color: #cccccc;
+}
+
+.app.dark-mode .dl-table tbody tr.row-data:hover {
+    background: #2a2d2e;
+}
+
+.app.dark-mode .dl-table tbody tr.row-data.selected {
+    background: #094771;
+    color: #ffffff;
+}
+
+.app.dark-mode .dl-table tbody td {
+    border-color: #333333;
+}
+
+.app.dark-mode .row-empty td {
+    border-color: #282828;
+}
+
+.app.dark-mode .detail-panel {
+    background: #252526;
+    border-color: #3c3c3c;
+    color: #cccccc;
+}
+
+.app.dark-mode .statusbar {
+    background: #252526;
+    border-color: #3c3c3c;
+    color: #888888;
 }
