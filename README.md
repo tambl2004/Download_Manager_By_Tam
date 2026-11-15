@@ -1,97 +1,142 @@
-# MyDM 0.1 cho Windows
+# MyDM 0.2 cho Windows
 
-Mã nguồn bản thử nghiệm có giao diện React, desktop Tauri 2, engine Rust, SQLite, native host và extension Chrome MV3. Không có phần thanh toán. ZIP là source, chưa kèm EXE đã biên dịch trên Windows. Đây chưa phải bản thay thế toàn bộ IDM.
+Mã nguồn phiên bản 0.2 có giao diện lấy cảm hứng từ IDM (menu, toolbar, sidebar phân loại, bảng dữ liệu, context menu, detail panel), desktop Tauri 2, engine Rust đa luồng, SQLite WAL, native messaging host v2 và extension Chrome Manifest V3. Không có tính năng thu tiền, activation hay bản quyền. Không sao chép tài nguyên độc quyền của IDM.
 
-## 1. Chuẩn bị Windows 11
+## 1. Chuẩn bị môi trường Windows 11
 
-Cài Rust stable MSVC bằng rustup tại https://rust-lang.org/tools/install/ ; Visual Studio Build Tools với workload **Desktop development with C++** và Windows SDK; Node.js LTS; Microsoft Edge WebView2 Runtime. Xem https://v2.tauri.app/start/prerequisites/ . Khi installer Rust hỏi, chọn cấu hình mặc định MSVC. Mở PowerShell mới sau cài đặt.
+Cài đặt:
+1. **Rust stable MSVC**: Cài qua [rustup](https://rust-lang.org/tools/install/). Khi installer hỏi, chọn cấu hình mặc định MSVC.
+2. **Visual Studio Build Tools**: Chọn workload **Desktop development with C++** và Windows SDK.
+3. **Node.js LTS**: Phiên bản LTS hiện hành (kèm npm).
+4. **Microsoft Edge WebView2 Runtime**: Thường có sẵn trên Windows 11. Xem thêm tại [Tauri Prerequisites](https://v2.tauri.app/start/prerequisites/).
 
-Kiểm tra:
+Mở PowerShell mới sau khi cài đặt và kiểm tra:
 ```powershell
 rustc --version
 cargo --version
 node --version
 npm --version
 ```
-Giải nén vào `C:\Dev\MyDM`, mở thư mục trong VS Code. Trong các lệnh dưới, thư mục này là gốc chứa Cargo.toml và README.md. Nếu PowerShell chặn npm.ps1, thay `npm` bằng `npm.cmd` hoặc dùng lệnh chạy script với ExecutionPolicy Bypass bên dưới; không cần đổi chính sách toàn máy.
 
-## 2. Chạy phần mềm khi lập trình
+Giải nén/clone dự án vào thư mục thuận tiện (ví dụ `C:\Dev\MyDM`). Nếu PowerShell chặn script `npm.ps1`, sử dụng `npm.cmd` hoặc chạy script với `-ExecutionPolicy Bypass`.
 
-Mở PowerShell tại gốc dự án:
+## 2. Chạy ứng dụng trong quá trình phát triển (Dev)
+
+Từ PowerShell tại gốc dự án:
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1
 ```
-Script cài dependency đúng package-lock.json và chạy Tauri. Lần đầu Cargo cần tải và biên dịch thư viện; chờ đến khi cửa sổ MyDM hiện ra. Cần Internet trong lần cài đầu. Không chỉ mở index.html vì phần tải chạy trong Rust.
+Lần đầu tiên Cargo sẽ tải và biên dịch các thư viện Rust; chờ cho đến khi cửa sổ giao diện MyDM hiển thị.
 
-Cách chạy thủ công tương đương:
+Cách chạy thủ công từng bước:
 ```powershell
 cd apps\desktop
 npm ci
 npm run tauri -- dev
 ```
-Vào Cài đặt, chọn đường dẫn tuyệt đối như `D:\Downloads\MyDM`; chọn 1–6 file đồng thời, 1–8 kết nối/file, giới hạn KB/s mỗi file (0 là không giới hạn). Lưu trước khi thêm tác vụ. Dán URL HTTP/HTTPS và tên file nếu muốn, bấm Thêm tải xuống. Giữ cửa sổ mở. Đóng cửa sổ sẽ dừng tiến trình; mở lại, tác vụ đang chạy được chuyển sang Tạm dừng, bấm Tiếp tục. Chỉ mở một instance.
 
-## 3. Tạo file EXE
+### Sử dụng giao diện MyDM (IDM-style)
+- **Thêm URL**: Nhấn biểu tượng `➕ Thêm URL` trên thanh công cụ hoặc phím tắt Enter trong hộp thoại để dán liên kết HTTP/HTTPS. Tên tệp có thể để trống để ứng dụng tự động nhận diện từ `Content-Disposition` (RFC 5987 / fallback) hoặc URL path.
+- **Thao tác tải**: `▶️ Tải tiếp`, `⏸️ Dừng`, `⏹️ Dừng tất cả`, `🗑️ Xóa lịch sử`, `🔄 Tải lại từ đầu`, `📂 Mở thư mục`. Nhấp chuột phải vào dòng dữ liệu để mở Context Menu.
+- **Cây thể loại bên trái**: Phân loại theo loại tệp (Dữ liệu nén, Tài liệu, Âm nhạc, Chương trình, Video, Hình ảnh) và theo trạng thái (Đang tải, Đã tải xong, Hàng đợi, Tạm dừng, Chờ xác nhận, Có lỗi).
+- **Tùy chọn (Cài đặt)**: Cấu hình thư mục lưu mặc định, số tệp tải đồng thời (1–6, mặc định 2), số kết nối mỗi tệp (1–8, mặc định 4) và giới hạn tốc độ theo đơn vị `KiB/s` (0 là không giới hạn).
 
-Từ PowerShell tại gốc dự án:
+## 3. Đóng gói bản Portable (Tạo file EXE)
+
+Tại PowerShell ở gốc dự án:
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.ps1
 ```
-Kết quả dự kiến sau khi build thành công:
-- `release\MyDM\mydm.exe`: ứng dụng desktop.
-- `release\MyDM\mydm-native-host.exe`: cầu nối Chrome.
-- `release\MyDM\chrome-extension\`: tiện ích Chrome.
-- Hai script đăng ký/gỡ host và README.
+Kết quả đóng gói nằm tại thư mục `release\MyDM\`:
+- `release\MyDM\mydm.exe`: Ứng dụng desktop.
+- `release\MyDM\mydm-native-host.exe`: Cầu nối Chrome Native Messaging Host.
+- `release\MyDM\chrome-extension\`: Tiện ích mở rộng Chrome MV3.
+- `release\MyDM\install-host.ps1` và `uninstall-host.ps1`: Script đăng ký và gỡ bỏ host trong Registry người dùng hiện tại (HKCU).
 
-Đây là gói portable, chưa có installer MSI/NSIS và chưa ký số. Máy chạy cần WebView2 Runtime. Lần sau mở mydm.exe trực tiếp, không cần chạy npm. Giữ nguyên vị trí EXE native host sau khi đăng ký; nếu chuyển thư mục phải đăng ký lại. Đường dẫn build nguyên bản là `target\release\mydm.exe` và `target\release\mydm-native-host.exe`; build script sao chép chúng vào release.
+## 4. Tích hợp bắt link Chrome (Phiên bản 0.2)
 
-## 4. Cấu hình bắt link trên Chrome
+### Bước 1: Cài đặt Chrome Extension
+1. Mở Chrome, truy cập `chrome://extensions/`.
+2. Bật công tắc **Chế độ dành cho nhà phát triển** (Developer mode).
+3. Nhấp **Tải tiện ích đã giải nén** (Load unpacked) và chọn thư mục `release\MyDM\chrome-extension` (hoặc `apps\chrome-extension` khi dev).
+4. Sao chép chuỗi **ID** của tiện ích (chuỗi 32 ký tự, ví dụ `abcdefghijklmnop...`).
 
-Sau khi build, mở `chrome://extensions`, bật **Chế độ dành cho nhà phát triển**, chọn **Tải tiện ích đã giải nén** và trỏ tới `release\MyDM\chrome-extension`. Sao chép ID tiện ích (32 ký tự a–p).
-
-Tại gốc dự án chạy, thay chuỗi trong ngoặc kép bằng ID thật:
+### Bước 2: Đăng ký Native Messaging Host
+Mở PowerShell và chạy lệnh đăng ký cho tài khoản Windows hiện tại (không cần quyền Admin):
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\release\MyDM\install-host.ps1 -ExtensionId "ID_TIEN_ICH_CUA_BAN"
 ```
-Không dùng nguyên giá trị minh họa: script kiểm tra ID và sẽ từ chối. Script chỉ đăng ký host cho tài khoản Windows hiện tại, không cần chạy Administrator. Nó ghi manifest tại `%LOCALAPPDATA%\MyDM\ChromeHost` và registry `HKCU\Software\Google\Chrome\NativeMessagingHosts\com.mydm.host`.
+*(Nếu đang dev bằng mã nguồn: xem hướng dẫn đăng ký chế độ dev ở mục bên dưới).*
 
-Mở MyDM; bấm biểu tượng extension → **Kiểm tra kết nối**. Thông báo “Native host hoạt động” chỉ xác nhận bridge, không xác nhận desktop đã mở. Trên một link tải công khai, bấm chuột phải → **Tải link bằng MyDM**. File xuất hiện trong ứng dụng sau khoảng 1 giây. Nếu MyDM chưa mở, tác vụ vẫn lưu trong hàng đợi và chạy khi mở ứng dụng.
+### Bước 3: Ba chế độ nhận link từ Chrome
+Mở popup tiện ích MyDM trên thanh công cụ Chrome:
+1. **Chế độ Tắt (Thủ công - Mặc định)**: Không tự động can thiệp tải xuống của Chrome. Để tải bằng MyDM, nhấp chuột phải vào liên kết bất kỳ trên trang web → chọn **Tải link bằng MyDM**.
+2. **Chế độ Hỏi trước (Ask)**: Khi một lượt tải bắt đầu trong Chrome, tiện ích tạo tác vụ ở trạng thái `Chờ xác nhận (held)` trên MyDM nhưng **không hủy** lượt tải của Chrome. Bạn mở MyDM để bấm `Tải tiếp` hoặc `Hủy`.
+3. **Chế độ Tự chuyển (Auto)**: Tiện ích kiểm tra danh sách domain cho phép (Allowlist) và loại trừ (Blocklist) cùng tùy chọn tên miền phụ. Nếu khớp: MyDM ghi nhận trạng thái `held` → tiện ích hủy download trong Chrome → giải phóng tác vụ MyDM sang hàng đợi (`queued`). Nếu Chrome đã hoàn tất trước khi chuyển thì tác vụ MyDM tự động hủy để tránh trùng lặp.
 
-Để tự chuyển download: trong popup bật **Tự chuyển lượt tải**, nhập các tên miền chính xác như `example.com, cdn.example.com`, bấm Lưu. Chỉ nhập hostname, không nhập https:// hay đường dẫn. Trường hợp redirect sang CDN phải thêm hostname cuối. Chức năng tự động mặc định tắt và chỉ áp dụng các domain đã chọn. MyDM tạo tác vụ Chờ xác nhận, Chrome hủy lượt tải, rồi bridge cho tác vụ MyDM chạy. Nếu Chrome đã tải xong thì tác vụ MyDM bị hủy để hạn chế trùng.
+### Bước 4: Tải bằng phiên đăng nhập (Cookie / Session Sites)
+Bản 0.2 cho phép tải các tệp yêu cầu đăng nhập trên các trang web cụ thể:
+1. Trong popup tiện ích Chrome, tại mục **Phiên đăng nhập**, nhập domain trang web (ví dụ `drive.google.com` hoặc `fshare.vn`) và nhấn **Cấp quyền**.
+2. Chrome sẽ hiển thị hộp thoại cấp quyền truy cập cookie cho website đó (`optional_permissions`).
+3. Khi tải link từ domain này, tiện ích sẽ lấy cookie phù hợp và gửi kèm Referer sang MyDM.
+4. **Bảo mật**:
+   - Khi máy chủ redirect sang tên miền khác (cross-origin), engine MyDM sẽ tự động loại bỏ Cookie và Referer để tránh rò rỉ thông tin xác thực.
+   - Cookie không bao giờ được ghi vào log hệ thống và bị loại bỏ khỏi snapshot giao diện UI.
+   - Khi tệp hoàn tất, cookie được xóa khỏi siêu dữ liệu.
+   - Bạn có thể nhấn **Thu hồi** quyền bất cứ lúc nào trong popup.
 
-Không bật tự chuyển cho link dùng một lần, yêu cầu đăng nhập, POST, blob, data hoặc website có DRM. Bản này không lấy cookie, Authorization hay request body từ Chrome. Một URL chuyển thành công vẫn có thể bị máy chủ từ chối khi Rust tải. Tắt tự chuyển rồi tải lại bằng Chrome nếu gặp trường hợp đó. Nếu Chrome đã dừng nhưng bước xác nhận cuối bị lỗi, mở MyDM và bấm Tiếp tục cho tác vụ Chờ xác nhận Chrome; kiểm tra popup để biết trạng thái. API Chrome không cung cấp giao dịch nguyên tử giữa hai ứng dụng nên vẫn có thể có tác vụ chờ/trùng khi extension bị dừng đột ngột.
+### Bước 5: Chẩn đoán kết nối
+Popup tiện ích Chrome hiển thị trạng thái kết nối tức thời:
+- Kết nối tới Native Host thành công hay thất bại.
+- Phiên bản giao thức host (Protocol Version 2).
+- Hướng dẫn khắc phục nếu ID hoặc registry chưa đúng.
 
-Đăng ký host cho chế độ dev (không bắt buộc build desktop release):
+## 5. Đăng ký Native Host trong chế độ Dev
+
+Khi đang lập trình và chưa build bản release:
 ```powershell
 cargo build -p mydm-native-host --locked
 powershell -NoProfile -ExecutionPolicy Bypass -File .\packaging\windows\install-host.ps1 -ExtensionId "ID_TIEN_ICH_CUA_BAN" -HostExe .\target\debug\mydm-native-host.exe
 ```
-Load unpacked từ `apps\chrome-extension`; giữ `npm run tauri -- dev` chạy. Không đăng ký cả hai bản extension cùng lúc; manifest hiện cho phép một ID.
 
-## 5. Sử dụng và lưu dữ liệu
+## 6. Lưu trữ dữ liệu và an toàn tải xuống
 
-Tạm dừng giữ các file part; Tiếp tục chỉ nối phần còn thiếu khi server có strong ETag và HTTP Range hợp lệ. Nếu không đủ điều kiện, tác vụ dùng một kết nối và tải lại từ đầu khi tiếp tục; không ghép file không xác minh được. Tải lại từ đầu cần xác nhận và xóa phần tải dở. Hủy giữ phần tải dở; Xóa lịch sử xóa cả part nhưng giữ file đã hoàn tất. Mở thư mục không tự thực thi file.
+- **Vị trí lưu trữ**:
+  - Dữ liệu tạm thời (`*.part`) và cơ sở dữ liệu tác vụ SQLite WAL được lưu tại: `%LOCALAPPDATA%\MyDM`.
+  - Tệp tải hoàn chỉnh được chuyển vào thư mục người dùng đã chọn.
+- **Tính toàn vẹn**:
+  - Tải đa luồng chỉ kích hoạt khi máy chủ hỗ trợ `HTTP Range` và trả về `Strong ETag`.
+  - Khi tiếp tục (Resume), engine kiểm tra ETag và Content-Range nghiêm ngặt; nếu ETag thay đổi, tác vụ bị dừng để bảo vệ tính toàn vẹn dữ liệu.
+  - Tệp trùng tên không bị ghi đè (tự động thêm hậu tố chỉ số).
+  - Tệp hoàn tất không bị xóa khi người dùng xóa lịch sử tải.
+  - File lock đảm bảo không có 2 tiến trình engine cùng can thiệp một cơ sở dữ liệu.
 
-Metadata và file part nằm ở `%LOCALAPPDATA%\MyDM`; file hoàn tất nằm ở thư mục đã chọn. Khi ghép file cần thêm dung lượng gần bằng kích thước file; sau khi ghi trạng thái hoàn tất, part được dọn. Không chỉnh/xóa SQLite khi ứng dụng hoặc bridge đang dùng. URL được lưu cục bộ trong lịch sử và có thể chứa token: không chia sẻ DB; xóa lịch sử khi không cần.
+## 7. Kiểm thử
 
-## 6. Kiểm thử
-
+Chạy bộ kiểm thử tự động của dự án:
 ```powershell
+# Kiểm thử Engine Rust (8 tests)
 cargo test -p mydm-engine -p mydm-native-host --locked
-cargo build -p mydm-engine --example smoke --locked
-py tests\run_smoke.py
+
+# Kiểm thử Chrome Extension Bridge (8 tests)
 node --test tests\chrome_bridge.test.cjs
+
+# Kiểm thử biên dịch TypeScript và Frontend Vite
+cd apps\desktop
+npx tsc --noEmit
+npx vite build
 ```
-Python 3 chỉ cần cho test, không cần để chạy ứng dụng. Để thử bằng giao diện, chạy `py tests\http_fixture.py`, thêm URL `http://127.0.0.1:8765/slow`. File chuẩn có 16 MiB; thử pause/resume. Với Chrome, thêm domain `127.0.0.1`, truy cập URL `/range`; trường hợp Chrome chỉ hiển thị nội dung thay vì download hãy dùng menu tải link.
 
-Đã kiểm tra trong môi trường phát triển: Rust core/native host compile, unit tests, HTTP thực với hash, bridge bằng mock Chrome và TypeScript/Vite build. Chưa chạy GUI/Chrome thật hoặc tạo EXE trên Windows trong phiên bàn giao này. Xem `docs/verification.md`.
+Chạy fixture máy chủ HTTP thử nghiệm:
+```powershell
+python tests\http_fixture.py
+```
+Sau đó dán liên kết `http://127.0.0.1:8765/slow` vào MyDM để thử nghiệm tạm dừng/tiếp tục tệp 16 MiB.
 
-## 7. Lỗi thường gặp
+## 8. Gỡ cài đặt Native Host
 
-`link.exe not found`: cài workload C++ và Windows SDK, mở terminal mới. Thiếu WebView2: cài WebView2 Runtime. `Native host not found`: kiểm tra registry, ID, đường dẫn EXE; đăng ký lại và reload extension. `Access forbidden`: ID không khớp allowed_origins. Có task nhưng không tải: mở desktop, kiểm tra trạng thái Held/Paused, thư mục và mạng. `Range hoặc ETag thay đổi`: chọn Tải lại từ đầu. Đợi lâu khi tạm dừng: yêu cầu mạng đang block; có timeout tối đa 600 giây/request. Không xóa file part khi ứng dụng đang chạy.
-
-Gỡ bridge:
+Nếu muốn gỡ đăng ký Native Messaging Host khỏi máy:
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\release\MyDM\uninstall-host.ps1
 ```
-Sau đó gỡ extension trong Chrome. Script không xóa lịch sử hay file tải.
+Sau đó xóa tiện ích mở rộng khỏi Chrome. Thao tác này không làm mất lịch sử và các tệp đã tải xuống.

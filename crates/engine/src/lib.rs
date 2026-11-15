@@ -173,6 +173,7 @@ impl Store {
         )?;
         Ok(())
     }
+    #[allow(clippy::too_many_arguments)]
     pub fn add(
         &self,
         url: &str,
@@ -451,7 +452,7 @@ pub fn parse_content_disposition(value: &str) -> Option<String> {
         // Format: charset'language'encoded_value
         if let Some(tick2) = rest.find('\'').and_then(|p1| rest[p1 + 1..].find('\'').map(|p2| p1 + 1 + p2)) {
             let encoded = rest[tick2 + 1..]
-                .split(|c: char| c == ';' || c == ' ')
+                .split([';', ' '])
                 .next()
                 .unwrap_or("");
             let decoded = percent_decode(encoded);
@@ -464,10 +465,10 @@ pub fn parse_content_disposition(value: &str) -> Option<String> {
     // Fallback: filename="value" or filename=value
     if let Some(pos) = value.to_lowercase().find("filename=") {
         let rest = value[pos + 9..].trim_start();
-        if rest.starts_with('"') {
+        if let Some(stripped) = rest.strip_prefix('"') {
             // Quoted
-            if let Some(end) = rest[1..].find('"') {
-                let name = &rest[1..1 + end];
+            if let Some(end) = stripped.find('"') {
+                let name = &stripped[..end];
                 if !name.is_empty() {
                     return Some(name.to_string());
                 }

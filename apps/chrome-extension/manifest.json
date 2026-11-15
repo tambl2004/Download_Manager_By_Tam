@@ -21,6 +21,14 @@
         "type": "module"
     },
     "action": {
-        "default_popup": "popup.html"
+        "default_popup": "popup.html",
+        "default_icon": {
+            "32": "icons/icon32.png",
+            "128": "icons/icon128.png"
+        }
+    },
+    "icons": {
+        "32": "icons/icon32.png",
+        "128": "icons/icon128.png"
     }
 }

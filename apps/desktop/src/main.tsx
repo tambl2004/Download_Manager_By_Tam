@@ -1,7 +1,19 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { createRoot } from "react-dom/client";
 import { invoke } from "@tauri-apps/api/core";
+import { Icon, addCollection } from "@iconify/react";
+import fluentColorIcons from "@iconify-json/fluent-color/icons.json";
 import "./style.css";
+
+// Nạp dữ liệu Fluent UI System Color Icons hoàn toàn offline
+addCollection({
+    ...(fluentColorIcons as any),
+    aliases: {
+        ...((fluentColorIcons as any).aliases || {}),
+        "folder-24": { parent: "document-folder-24" },
+        "settings-24": { parent: "settings-24" },
+    },
+});
 
 /* ── Types ── */
 type Task = {
@@ -74,9 +86,14 @@ const EXT_MAP: Record<string, FileCategory> = {
     jpg: "image", jpeg: "image", png: "image", gif: "image", bmp: "image", svg: "image", webp: "image", ico: "image",
 };
 
-const FILE_ICONS: Record<FileCategory, string> = {
-    archive: "📦", document: "📄", music: "🎵", video: "🎬",
-    program: "⚙️", image: "🖼️", other: "📎",
+const FILE_ICONS: Record<FileCategory, { icon?: string; img?: string }> = {
+    archive: { img: "/icons/Archive_Folder.png" },
+    document: { img: "/icons/Document.png" },
+    music: { img: "/icons/Music.png" },
+    video: { img: "/icons/Video.png" },
+    program: { img: "/icons/Services.png" },
+    image: { img: "/icons/Image_File.png" },
+    other: { img: "/icons/File.png" },
 };
 
 function getFileCategory(name: string): FileCategory {
@@ -87,33 +104,38 @@ function getFileCategory(name: string): FileCategory {
 /* ── Sidebar items ── */
 type SidebarFilter =
     | "all"
-    | "cat:archive" | "cat:document" | "cat:music" | "cat:program" | "cat:video" | "cat:image" | "cat:other"
-    | "running" | "queued" | "paused" | "completed" | "failed" | "held";
+    | "cat:archive" | "cat:document" | "cat:music" | "cat:program" | "cat:video"
+    | "unfinished"
+    | "unfinished:archive" | "unfinished:document" | "unfinished:music" | "unfinished:program" | "unfinished:video"
+    | "completed"
+    | "completed:archive" | "completed:document" | "completed:music" | "completed:program" | "completed:video"
+    | "grabber"
+    | "queue"
+    | "queue:main"
+    | "queue:sync";
 
-const CATEGORY_TREE: { key: SidebarFilter; label: string; icon: string; isChild?: boolean }[] = [
-    { key: "all", label: "Tất cả", icon: "📁" },
-    { key: "cat:archive", label: "Dữ liệu nén", icon: "📦", isChild: true },
-    { key: "cat:document", label: "Tài liệu", icon: "📄", isChild: true },
-    { key: "cat:music", label: "Âm nhạc", icon: "🎵", isChild: true },
-    { key: "cat:program", label: "Chương trình", icon: "⚙️", isChild: true },
-    { key: "cat:video", label: "Video", icon: "🎬", isChild: true },
-    { key: "cat:image", label: "Hình ảnh", icon: "🖼️", isChild: true },
-];
-
-const STATUS_TREE: { key: SidebarFilter; label: string; icon: string }[] = [
-    { key: "running", label: "Đang tải", icon: "🔽" },
-    { key: "completed", label: "Đã tải xong", icon: "✅" },
-    { key: "queued", label: "Hàng đợi", icon: "📋" },
-    { key: "paused", label: "Tạm dừng", icon: "⏸️" },
-    { key: "held", label: "Chờ xác nhận", icon: "⏳" },
-    { key: "failed", label: "Có lỗi", icon: "❌" },
+const SUB_CATEGORIES = [
+    { key: "archive" as const, label: "Dữ liệu nén", img: "/icons/Archive_Folder.png" },
+    { key: "document" as const, label: "Tài liệu", img: "/icons/Document.png" },
+    { key: "music" as const, label: "Âm nhạc", img: "/icons/Music.png" },
+    { key: "program" as const, label: "Chương trình", img: "/icons/Services.png" },
+    { key: "video" as const, label: "Video", img: "/icons/Video.png" },
 ];
 
 /* ── Main App ── */
 function App() {
     const [tasks, setTasks] = useState<Task[]>([]);
     const [filter, setFilter] = useState<SidebarFilter>("all");
-    const [search, setSearch] = useState("");
+    const [expanded, setExpanded] = useState<Record<string, boolean>>({
+        all: true,
+        unfinished: false,
+        completed: false,
+        queue: false,
+    });
+    const toggleExpand = (key: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
+    };
     const [config, setConfig] = useState<Config | null>(null);
     const [message, setMessage] = useState<{ text: string; type: "error" | "success" } | null>(null);
     const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -121,7 +143,12 @@ function App() {
     const [showAddDialog, setShowAddDialog] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     const [showSidebar, setShowSidebar] = useState(true);
+    const [showToolbar, setShowToolbar] = useState(true);
+    const [showStatusbar, setShowStatusbar] = useState(true);
+    const [activeMenu, setActiveMenu] = useState<"job" | "file" | "download" | "view" | null>(null);
+    const [speedLimiterEnabled, setSpeedLimiterEnabled] = useState(false);
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; taskId: string } | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Add dialog state
     const [addUrl, setAddUrl] = useState("");
@@ -176,6 +203,27 @@ function App() {
         }
     }, [contextMenu]);
 
+    // Close menubar dropdown menu on click outside or Escape
+    useEffect(() => {
+        const handleGlobalClick = (e: MouseEvent) => {
+            const target = e.target as HTMLElement;
+            if (!target.closest(".menubar")) {
+                setActiveMenu(null);
+            }
+        };
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "Escape") {
+                setActiveMenu(null);
+            }
+        };
+        window.addEventListener("click", handleGlobalClick);
+        window.addEventListener("keydown", handleKeyDown);
+        return () => {
+            window.removeEventListener("click", handleGlobalClick);
+            window.removeEventListener("keydown", handleKeyDown);
+        };
+    }, []);
+
     const act = async (id: string, action: string) => {
         if (
             ["delete", "restart"].includes(action) &&
@@ -220,16 +268,86 @@ function App() {
         }
     };
 
+    const exportUrls = (format: "ef2" | "txt") => {
+        const urls = tasks.map(t => t.url).filter(Boolean);
+        if (urls.length === 0) {
+            setMessage({ text: "Không có liên kết nào để xuất", type: "error" });
+            return;
+        }
+        let content = "";
+        if (format === "ef2") {
+            content = tasks.map(t => `<${t.url}>\r\nfile: ${t.name}\r\n`).join("\r\n");
+        } else {
+            content = urls.join("\r\n");
+        }
+        const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = format === "ef2" ? "mydm_export.ef2" : "mydm_export.txt";
+        a.click();
+        URL.revokeObjectURL(url);
+        setMessage({
+            text: format === "ef2" ? "Đã xuất ra tệp tin kết xuất IDM (.ef2)" : "Đã xuất ra tệp văn bản (.txt)",
+            type: "success"
+        });
+    };
+
+    const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        try {
+            const text = await file.text();
+            const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+            const urls: string[] = [];
+            for (const line of lines) {
+                const m = line.match(/<([^>]+)>/) || line.match(/^(https?:\/\/[^\s]+)/i);
+                if (m) urls.push(m[1]);
+            }
+            if (urls.length > 0) {
+                setAddUrl(urls[0]);
+                setShowAddDialog(true);
+                setMessage({ text: `Đã đọc ${urls.length} liên kết từ tệp`, type: "success" });
+            } else {
+                setMessage({ text: "Không tìm thấy liên kết hợp lệ trong tệp", type: "error" });
+            }
+        } catch (err) {
+            setMessage({ text: String(err), type: "error" });
+        }
+        e.target.value = "";
+    };
+
     /* Filter tasks */
     const filteredTasks = tasks.filter((t) => {
-        const matchSearch = t.name.toLocaleLowerCase().includes(search.toLocaleLowerCase());
-        if (!matchSearch) return false;
         if (filter === "all") return true;
         if (filter.startsWith("cat:")) {
-            const cat = filter.slice(4) as FileCategory;
-            return getFileCategory(t.name) === cat;
+            return getFileCategory(t.name) === filter.slice(4);
         }
-        return t.state === filter;
+        if (filter === "unfinished") {
+            return t.state !== "completed";
+        }
+        if (filter.startsWith("unfinished:")) {
+            return t.state !== "completed" && getFileCategory(t.name) === filter.slice(11);
+        }
+        if (filter === "completed") {
+            return t.state === "completed";
+        }
+        if (filter.startsWith("completed:")) {
+            return t.state === "completed" && getFileCategory(t.name) === filter.slice(10);
+        }
+        if (filter === "grabber") {
+            return t.source === "grabber";
+        }
+        if (filter === "queue") {
+            return t.state === "queued" || t.state === "held";
+        }
+        if (filter === "queue:main") {
+            return t.state === "queued";
+        }
+        if (filter === "queue:sync") {
+            return t.state === "held";
+        }
+        return true;
     });
 
     const selectedTask = tasks.find((t) => t.id === selectedId);
@@ -238,10 +356,33 @@ function App() {
     const countForFilter = (f: SidebarFilter): number => {
         if (f === "all") return tasks.length;
         if (f.startsWith("cat:")) {
-            const cat = f.slice(4) as FileCategory;
-            return tasks.filter((t) => getFileCategory(t.name) === cat).length;
+            return tasks.filter((t) => getFileCategory(t.name) === f.slice(4)).length;
         }
-        return tasks.filter((t) => t.state === f).length;
+        if (f === "unfinished") {
+            return tasks.filter((t) => t.state !== "completed").length;
+        }
+        if (f.startsWith("unfinished:")) {
+            return tasks.filter((t) => t.state !== "completed" && getFileCategory(t.name) === f.slice(11)).length;
+        }
+        if (f === "completed") {
+            return tasks.filter((t) => t.state === "completed").length;
+        }
+        if (f.startsWith("completed:")) {
+            return tasks.filter((t) => t.state === "completed" && getFileCategory(t.name) === f.slice(10)).length;
+        }
+        if (f === "grabber") {
+            return tasks.filter((t) => t.source === "grabber").length;
+        }
+        if (f === "queue") {
+            return tasks.filter((t) => t.state === "queued" || t.state === "held").length;
+        }
+        if (f === "queue:main") {
+            return tasks.filter((t) => t.state === "queued").length;
+        }
+        if (f === "queue:sync") {
+            return tasks.filter((t) => t.state === "held").length;
+        }
+        return 0;
     };
 
     const totalSpeed = Object.values(rates).reduce((a, b) => a + b, 0);
@@ -256,19 +397,455 @@ function App() {
 
     return (
         <div className="app" onClick={() => setContextMenu(null)}>
-            {/* ── Menu bar ── */}
+            {/* Hidden file input for importing task lists */}
+            <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleImportFile}
+                accept=".txt,.ef2"
+                style={{ display: "none" }}
+            />
+            {/* ── Menu bar (Clean white, classic Win32 IDM) ── */}
             <div className="menubar">
-                <button>Công việc</button>
-                <button>Tệp tin</button>
-                <button>Tải xuống</button>
-                <button onClick={() => setShowSidebar(!showSidebar)}>Hiển thị</button>
-                <button>Trợ giúp</button>
+                <div className="menubar-items">
+                    {/* Menu: Công việc */}
+                    <div className="menubar-menu-wrapper">
+                        <button
+                            className={`menubar-menu-btn ${activeMenu === "job" ? "active" : ""}`}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveMenu(activeMenu === "job" ? null : "job");
+                            }}
+                            onMouseEnter={() => {
+                                if (activeMenu !== null) setActiveMenu("job");
+                            }}
+                        >
+                            Công việc
+                        </button>
+                        {activeMenu === "job" && (
+                            <div className="menubar-dropdown">
+                                <div
+                                    className="menubar-menu-item"
+                                    onClick={() => {
+                                        setShowAddDialog(true);
+                                        setActiveMenu(null);
+                                    }}
+                                >
+                                    Thêm tải xuống
+                                </div>
+                                <div
+                                    className="menubar-menu-item"
+                                    onClick={() => {
+                                        setShowAddDialog(true);
+                                        setActiveMenu(null);
+                                    }}
+                                >
+                                    Tải xuống hàng loạt
+                                </div>
+                                <div
+                                    className="menubar-menu-item"
+                                    onClick={async () => {
+                                        setActiveMenu(null);
+                                        try {
+                                            const text = await navigator.clipboard.readText();
+                                            if (text && (text.startsWith("http://") || text.startsWith("https://"))) {
+                                                setAddUrl(text);
+                                                setShowAddDialog(true);
+                                            } else {
+                                                setShowAddDialog(true);
+                                            }
+                                        } catch {
+                                            setShowAddDialog(true);
+                                        }
+                                    }}
+                                >
+                                    Tải hàng loạt liên kết trong clipboard
+                                </div>
+                                <div
+                                    className="menubar-menu-item"
+                                    onClick={() => {
+                                        setFilter("grabber");
+                                        setActiveMenu(null);
+                                    }}
+                                >
+                                    Chạy Grabber
+                                </div>
+                                <div className="menubar-menu-divider" />
+                                <div
+                                    className="menubar-menu-item"
+                                    onClick={() => {
+                                        setMessage({ text: "Hộp thả liên kết đang được bật", type: "success" });
+                                        setActiveMenu(null);
+                                    }}
+                                >
+                                    Hiện hộp thả liên kết
+                                </div>
+                                <div className="menubar-menu-divider" />
+                                <div className="menubar-menu-item menubar-has-sub">
+                                    <span>Xuất dữ liệu</span>
+                                    <span className="menu-arrow">▸</span>
+                                    <div className="menubar-submenu">
+                                        <div
+                                            className="menubar-menu-item"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                exportUrls("ef2");
+                                                setActiveMenu(null);
+                                            }}
+                                        >
+                                            Ra tệp tin kết xuất IDM
+                                        </div>
+                                        <div
+                                            className="menubar-menu-item"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                exportUrls("txt");
+                                                setActiveMenu(null);
+                                            }}
+                                        >
+                                            Ra tệp văn bản
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="menubar-menu-item menubar-has-sub">
+                                    <span>Nhập dữ liệu</span>
+                                    <span className="menu-arrow">▸</span>
+                                    <div className="menubar-submenu">
+                                        <div
+                                            className="menubar-menu-item"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                fileInputRef.current?.click();
+                                                setActiveMenu(null);
+                                            }}
+                                        >
+                                            Từ tệp tin kết xuất IDM
+                                        </div>
+                                        <div
+                                            className="menubar-menu-item"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                fileInputRef.current?.click();
+                                                setActiveMenu(null);
+                                            }}
+                                        >
+                                            Từ tệp văn bản
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="menubar-menu-divider" />
+                                <div
+                                    className="menubar-menu-item"
+                                    onClick={() => {
+                                        setActiveMenu(null);
+                                        window.close();
+                                    }}
+                                >
+                                    Thoát
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Menu: Tệp tin */}
+                    <div className="menubar-menu-wrapper">
+                        <button
+                            className={`menubar-menu-btn ${activeMenu === "file" ? "active" : ""}`}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveMenu(activeMenu === "file" ? null : "file");
+                            }}
+                            onMouseEnter={() => {
+                                if (activeMenu !== null) setActiveMenu("file");
+                            }}
+                        >
+                            Tệp tin
+                        </button>
+                        {activeMenu === "file" && (
+                            <div className="menubar-dropdown">
+                                <div
+                                    className={`menubar-menu-item ${!selectedTask || !["running", "queued", "held"].includes(selectedTask.state) ? "disabled" : ""}`}
+                                    onClick={() => {
+                                        if (selectedTask) act(selectedTask.id, "pause");
+                                        setActiveMenu(null);
+                                    }}
+                                >
+                                    Dừng tải
+                                </div>
+                                <div
+                                    className={`menubar-menu-item ${!selectedTask ? "disabled" : ""}`}
+                                    onClick={() => {
+                                        if (selectedTask) act(selectedTask.id, "delete");
+                                        setActiveMenu(null);
+                                    }}
+                                >
+                                    Xóa
+                                </div>
+                                <div
+                                    className={`menubar-menu-item ${!selectedTask || !["paused", "failed", "held"].includes(selectedTask.state) ? "disabled" : ""}`}
+                                    onClick={() => {
+                                        if (selectedTask) act(selectedTask.id, "resume");
+                                        setActiveMenu(null);
+                                    }}
+                                >
+                                    Tải xuống ngay
+                                </div>
+                                <div
+                                    className={`menubar-menu-item ${!selectedTask || !["failed", "paused", "cancelled", "completed"].includes(selectedTask.state) ? "disabled" : ""}`}
+                                    onClick={() => {
+                                        if (selectedTask) act(selectedTask.id, "restart");
+                                        setActiveMenu(null);
+                                    }}
+                                >
+                                    Tải lại
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Menu: Tải xuống */}
+                    <div className="menubar-menu-wrapper">
+                        <button
+                            className={`menubar-menu-btn ${activeMenu === "download" ? "active" : ""}`}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveMenu(activeMenu === "download" ? null : "download");
+                            }}
+                            onMouseEnter={() => {
+                                if (activeMenu !== null) setActiveMenu("download");
+                            }}
+                        >
+                            Tải xuống
+                        </button>
+                        {activeMenu === "download" && (
+                            <div className="menubar-dropdown">
+                                <div
+                                    className={`menubar-menu-item ${tasks.filter(t => ["running", "queued", "held"].includes(t.state)).length === 0 ? "disabled" : ""}`}
+                                    onClick={() => {
+                                        tasks.filter(t => ["running", "queued", "held"].includes(t.state)).forEach(t => void act(t.id, "pause"));
+                                        setActiveMenu(null);
+                                    }}
+                                >
+                                    Tạm dừng tất cả
+                                </div>
+                                <div
+                                    className={`menubar-menu-item ${tasks.filter(t => ["running", "queued", "held"].includes(t.state)).length === 0 ? "disabled" : ""}`}
+                                    onClick={() => {
+                                        tasks.filter(t => ["running", "queued", "held"].includes(t.state)).forEach(t => void act(t.id, "pause"));
+                                        setActiveMenu(null);
+                                    }}
+                                >
+                                    Dừng tất cả
+                                </div>
+                                <div className="menubar-menu-divider" />
+                                <div
+                                    className={`menubar-menu-item ${tasks.filter(t => t.state === "completed").length === 0 ? "disabled" : ""}`}
+                                    onClick={() => {
+                                        tasks.filter(t => t.state === "completed").forEach(t => void act(t.id, "delete"));
+                                        setActiveMenu(null);
+                                    }}
+                                >
+                                    Xóa tất cả các mục tải xong
+                                </div>
+                                <div className="menubar-menu-divider" />
+                                <div
+                                    className="menubar-menu-item"
+                                    onClick={() => {
+                                        setMessage({ text: "Tìm kiếm tệp tải xuống", type: "success" });
+                                        setActiveMenu(null);
+                                    }}
+                                >
+                                    Tìm kiếm (Ctrl-F)
+                                </div>
+                                <div
+                                    className="menubar-menu-item"
+                                    onClick={() => {
+                                        setActiveMenu(null);
+                                    }}
+                                >
+                                    Tìm tiếp (F3)
+                                </div>
+                                <div className="menubar-menu-divider" />
+                                <div
+                                    className="menubar-menu-item"
+                                    onClick={() => {
+                                        setMessage({ text: "Lập lịch tải tự động", type: "success" });
+                                        setActiveMenu(null);
+                                    }}
+                                >
+                                    Lập lịch
+                                </div>
+                                <div className="menubar-menu-item menubar-has-sub">
+                                    <span>Bắt đầu danh sách chờ tải</span>
+                                    <span className="menu-arrow">▸</span>
+                                    <div className="menubar-submenu">
+                                        <div
+                                            className="menubar-menu-item"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                tasks.filter(t => t.state === "paused" || t.state === "queued").forEach(t => void act(t.id, "resume"));
+                                                setMessage({ text: "Đã bắt đầu Danh sách chờ tải chính", type: "success" });
+                                                setActiveMenu(null);
+                                            }}
+                                        >
+                                            Bắt đầu Danh sách chờ tải chính
+                                        </div>
+                                        <div
+                                            className="menubar-menu-item"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                tasks.filter(t => t.state === "held").forEach(t => void act(t.id, "resume"));
+                                                setMessage({ text: "Đã bắt đầu Đồng bộ danh sách chờ tải", type: "success" });
+                                                setActiveMenu(null);
+                                            }}
+                                        >
+                                            Bắt đầu Đồng bộ danh sách chờ tải
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="menubar-menu-item menubar-has-sub">
+                                    <span>Dừng danh sách chờ tải</span>
+                                    <span className="menu-arrow">▸</span>
+                                    <div className="menubar-submenu">
+                                        <div
+                                            className={`menubar-menu-item ${tasks.filter(t => t.state === "running").length === 0 ? "disabled" : ""}`}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                tasks.filter(t => t.state === "running").forEach(t => void act(t.id, "pause"));
+                                                setMessage({ text: "Đã dừng Danh sách chờ tải chính", type: "success" });
+                                                setActiveMenu(null);
+                                            }}
+                                        >
+                                            Dừng Danh sách chờ tải chính
+                                        </div>
+                                        <div
+                                            className={`menubar-menu-item ${tasks.filter(t => t.state === "running" && t.source === "chrome").length === 0 ? "disabled" : ""}`}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                tasks.filter(t => t.state === "running" && t.source === "chrome").forEach(t => void act(t.id, "pause"));
+                                                setMessage({ text: "Đã dừng Đồng bộ danh sách chờ tải", type: "success" });
+                                                setActiveMenu(null);
+                                            }}
+                                        >
+                                            Dừng Đồng bộ danh sách chờ tải
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="menubar-menu-divider" />
+                                <div className="menubar-menu-item menubar-has-sub">
+                                    <span>Tính năng hạn chế tốc độ</span>
+                                    <span className="menu-arrow">▸</span>
+                                    <div className="menubar-submenu">
+                                        <div
+                                            className="menubar-menu-item"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setSpeedLimiterEnabled(true);
+                                                setMessage({ text: "Đã bật tính năng hạn chế tốc độ", type: "success" });
+                                                setActiveMenu(null);
+                                            }}
+                                        >
+                                            {speedLimiterEnabled && <span className="menu-bullet">•</span>}
+                                            <span>Bật</span>
+                                        </div>
+                                        <div
+                                            className="menubar-menu-item"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setSpeedLimiterEnabled(false);
+                                                setMessage({ text: "Đã tắt tính năng hạn chế tốc độ", type: "success" });
+                                                setActiveMenu(null);
+                                            }}
+                                        >
+                                            {!speedLimiterEnabled && <span className="menu-bullet">•</span>}
+                                            <span>Tắt</span>
+                                        </div>
+                                        <div className="menubar-menu-divider" />
+                                        <div
+                                            className="menubar-menu-item"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setShowSettings(true);
+                                                setActiveMenu(null);
+                                            }}
+                                        >
+                                            Thiết lập...
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="menubar-menu-divider" />
+                                <div
+                                    className="menubar-menu-item"
+                                    onClick={() => {
+                                        setShowSettings(true);
+                                        setActiveMenu(null);
+                                    }}
+                                >
+                                    Tùy chọn
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Menu: Hiển thị */}
+                    <div className="menubar-menu-wrapper">
+                        <button
+                            className={`menubar-menu-btn ${activeMenu === "view" ? "active" : ""}`}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveMenu(activeMenu === "view" ? null : "view");
+                            }}
+                            onMouseEnter={() => {
+                                if (activeMenu !== null) setActiveMenu("view");
+                            }}
+                        >
+                            Hiển thị
+                        </button>
+                        {activeMenu === "view" && (
+                            <div className="menubar-dropdown">
+                                <div
+                                    className="menubar-menu-item"
+                                    onClick={() => {
+                                        setShowSidebar(prev => !prev);
+                                        setActiveMenu(null);
+                                    }}
+                                >
+                                    {showSidebar && <span className="menu-check">✓</span>}
+                                    <span>Cây thể loại</span>
+                                </div>
+                                <div
+                                    className="menubar-menu-item"
+                                    onClick={() => {
+                                        setShowToolbar(prev => !prev);
+                                        setActiveMenu(null);
+                                    }}
+                                >
+                                    {showToolbar && <span className="menu-check">✓</span>}
+                                    <span>Thanh công cụ</span>
+                                </div>
+                                <div
+                                    className="menubar-menu-item"
+                                    onClick={() => {
+                                        setShowStatusbar(prev => !prev);
+                                        setActiveMenu(null);
+                                    }}
+                                >
+                                    {showStatusbar && <span className="menu-check">✓</span>}
+                                    <span>Thanh trạng thái</span>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
             </div>
 
             {/* ── Toolbar ── */}
+            {showToolbar && (
             <div className="toolbar">
                 <button className="toolbar-btn" onClick={() => setShowAddDialog(true)} title="Thêm URL mới">
-                    <span className="icon">➕</span>
+                    <span className="icon">
+                        <img width="80" height="80" src="/icons/Plus.png" alt="add" />
+                    </span>
                     Thêm URL
                 </button>
 
@@ -277,7 +854,9 @@ function App() {
                     onClick={() => selectedTask && act(selectedTask.id, "resume")}
                     title="Tiếp tục tải"
                 >
-                    <span className="icon">▶️</span>
+                    <span className="icon">
+                        <img width="80" height="80" src="/icons/Download.png" alt="download" />
+                    </span>
                     Tải tiếp
                 </button>
 
@@ -286,7 +865,9 @@ function App() {
                     onClick={() => selectedTask && act(selectedTask.id, "pause")}
                     title="Tạm dừng"
                 >
-                    <span className="icon">⏸️</span>
+                    <span className="icon">
+                        <img width="80" height="80" src="/icons/Stop.png" alt="pause" />
+                    </span>
                     Dừng
                 </button>
 
@@ -295,7 +876,9 @@ function App() {
                     onClick={() => tasks.filter(t => ["running", "queued", "held"].includes(t.state)).forEach(t => void act(t.id, "pause"))}
                     title="Dừng tất cả"
                 >
-                    <span className="icon">⏹️</span>
+                    <span className="icon">
+                        <img width="80" height="80" src="/icons/Cancel.png" alt="stop all" />
+                    </span>
                     Dừng tất cả
                 </button>
 
@@ -306,7 +889,9 @@ function App() {
                     onClick={() => selectedTask && act(selectedTask.id, "delete")}
                     title="Xóa lịch sử"
                 >
-                    <span className="icon">🗑️</span>
+                    <span className="icon">
+                        <img width="80" height="80" src="/icons/Trash_Can.png" alt="delete" />
+                    </span>
                     Xóa
                 </button>
 
@@ -315,14 +900,18 @@ function App() {
                     onClick={() => selectedTask && act(selectedTask.id, "restart")}
                     title="Tải lại từ đầu"
                 >
-                    <span className="icon">🔄</span>
+                    <span className="icon">
+                        <img width="80" height="80" src="/icons/Restart.png" alt="restart" />
+                    </span>
                     Tải lại
                 </button>
 
                 <div className="toolbar-sep" />
 
                 <button className="toolbar-btn" onClick={() => setShowSettings(true)} title="Tùy chọn">
-                    <span className="icon">⚙️</span>
+                    <span className="icon">
+                        <img width="80" height="80" src="/icons/Settings.png" alt="settings" />
+                    </span>
                     Tùy chọn
                 </button>
 
@@ -331,7 +920,9 @@ function App() {
                     onClick={() => tasks.filter(t => t.state === "paused").forEach(t => void act(t.id, "resume"))}
                     title="Tiếp tục tất cả đang tạm dừng"
                 >
-                    <span className="icon">⏩</span>
+                    <span className="icon">
+                        <img width="80" height="80" src="/icons/Synchronize.png" alt="start all" />
+                    </span>
                     Bắt đầu …
                 </button>
 
@@ -342,20 +933,13 @@ function App() {
                     onClick={() => selectedTask && invoke("open_folder", { id: selectedTask.id }).catch(e => setMessage({ text: String(e), type: "error" }))}
                     title="Mở thư mục chứa tệp"
                 >
-                    <span className="icon">📂</span>
+                    <span className="icon">
+                        <img width="80" height="80" src="/icons/Opened_Folder.png" alt="open folder" />
+                    </span>
                     Mở thư mục
                 </button>
-
-                {/* Search box */}
-                <div className="search-box">
-                    <input
-                        placeholder="Tìm tên tệp…"
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        aria-label="Tìm kiếm"
-                    />
-                </div>
             </div>
+            )}
 
             {/* ── Message bar ── */}
             {message && (
@@ -374,29 +958,183 @@ function App() {
                             <span>Thể loại</span>
                             <button className="sidebar-close" onClick={() => setShowSidebar(false)} title="Đóng bảng thể loại">✕</button>
                         </div>
-                        {CATEGORY_TREE.map((item) => (
-                            <div
-                                key={item.key}
-                                className={`tree-item ${filter === item.key ? "selected" : ""} ${item.isChild ? "tree-child" : ""}`}
-                                onClick={() => setFilter(item.key)}
-                            >
-                                <span className="tree-icon">{item.icon}</span>
-                                <span className="tree-label">{item.label}</span>
-                                <span className="tree-count">{countForFilter(item.key)}</span>
-                            </div>
-                        ))}
-                        <div className="tree-section">
-                            {STATUS_TREE.map((item) => (
+                        <div className="tree-container">
+                            {/* 1. Tất cả */}
+                            <div className="tree-node is-first-root">
                                 <div
-                                    key={item.key}
-                                    className={`tree-item ${filter === item.key ? "selected" : ""}`}
-                                    onClick={() => setFilter(item.key)}
+                                    className={`tree-item ${filter === "all" ? "selected" : ""}`}
+                                    onClick={() => setFilter("all")}
                                 >
-                                    <span className="tree-icon">{item.icon}</span>
-                                    <span className="tree-label">{item.label}</span>
-                                    <span className="tree-count">{countForFilter(item.key)}</span>
+                                    <span
+                                        className="tree-toggle"
+                                        onClick={(e) => toggleExpand("all", e)}
+                                        title={expanded.all ? "Thu gọn" : "Mở rộng"}
+                                    >
+                                        {expanded.all ? "−" : "+"}
+                                    </span>
+                                    <span className="tree-icon">
+                                        <img src="/icons/Opened_Folder.png" alt="Tất cả" />
+                                    </span>
+                                    <span className="tree-label">Tất cả</span>
+                                    <span className="tree-count">{countForFilter("all")}</span>
                                 </div>
-                            ))}
+
+                                {expanded.all && (
+                                    <div className="tree-sub-group">
+                                        {SUB_CATEGORIES.map((sub, idx) => (
+                                            <div
+                                                key={sub.key}
+                                                className={`tree-item tree-sub-row ${idx === SUB_CATEGORIES.length - 1 ? "is-last" : ""} ${filter === `cat:${sub.key}` ? "selected" : ""}`}
+                                                onClick={() => setFilter(`cat:${sub.key}` as SidebarFilter)}
+                                            >
+                                                <span className="tree-icon">
+                                                    <img src={sub.img} alt={sub.label} />
+                                                </span>
+                                                <span className="tree-label">{sub.label}</span>
+                                                <span className="tree-count">{countForFilter(`cat:${sub.key}` as SidebarFilter)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* 2. Chưa tải xong */}
+                            <div className="tree-node">
+                                <div
+                                    className={`tree-item ${filter === "unfinished" ? "selected" : ""}`}
+                                    onClick={() => setFilter("unfinished")}
+                                >
+                                    <span
+                                        className="tree-toggle"
+                                        onClick={(e) => toggleExpand("unfinished", e)}
+                                        title={expanded.unfinished ? "Thu gọn" : "Mở rộng"}
+                                    >
+                                        {expanded.unfinished ? "−" : "+"}
+                                    </span>
+                                    <span className="tree-icon">
+                                        <img src="/icons/Downloads_Folder.png" alt="Chưa tải xong" />
+                                    </span>
+                                    <span className="tree-label">Chưa tải xong</span>
+                                    <span className="tree-count">{countForFilter("unfinished")}</span>
+                                </div>
+
+                                {expanded.unfinished && (
+                                    <div className="tree-sub-group">
+                                        {SUB_CATEGORIES.map((sub, idx) => (
+                                            <div
+                                                key={sub.key}
+                                                className={`tree-item tree-sub-row ${idx === SUB_CATEGORIES.length - 1 ? "is-last" : ""} ${filter === `unfinished:${sub.key}` ? "selected" : ""}`}
+                                                onClick={() => setFilter(`unfinished:${sub.key}` as SidebarFilter)}
+                                            >
+                                                <span className="tree-icon">
+                                                    <img src={sub.img} alt={sub.label} />
+                                                </span>
+                                                <span className="tree-label">{sub.label}</span>
+                                                <span className="tree-count">{countForFilter(`unfinished:${sub.key}` as SidebarFilter)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* 3. Đã tải xong */}
+                            <div className="tree-node">
+                                <div
+                                    className={`tree-item ${filter === "completed" ? "selected" : ""}`}
+                                    onClick={() => setFilter("completed")}
+                                >
+                                    <span
+                                        className="tree-toggle"
+                                        onClick={(e) => toggleExpand("completed", e)}
+                                        title={expanded.completed ? "Thu gọn" : "Mở rộng"}
+                                    >
+                                        {expanded.completed ? "−" : "+"}
+                                    </span>
+                                    <span className="tree-icon">
+                                        <img src="/icons/Check_Mark.png" alt="Đã tải xong" />
+                                    </span>
+                                    <span className="tree-label">Đã tải xong</span>
+                                    <span className="tree-count">{countForFilter("completed")}</span>
+                                </div>
+
+                                {expanded.completed && (
+                                    <div className="tree-sub-group">
+                                        {SUB_CATEGORIES.map((sub, idx) => (
+                                            <div
+                                                key={sub.key}
+                                                className={`tree-item tree-sub-row ${idx === SUB_CATEGORIES.length - 1 ? "is-last" : ""} ${filter === `completed:${sub.key}` ? "selected" : ""}`}
+                                                onClick={() => setFilter(`completed:${sub.key}` as SidebarFilter)}
+                                            >
+                                                <span className="tree-icon">
+                                                    <img src={sub.img} alt={sub.label} />
+                                                </span>
+                                                <span className="tree-label">{sub.label}</span>
+                                                <span className="tree-count">{countForFilter(`completed:${sub.key}` as SidebarFilter)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* 4. Grabber Project */}
+                            <div className="tree-node">
+                                <div
+                                    className={`tree-item tree-leaf-row ${filter === "grabber" ? "selected" : ""}`}
+                                    onClick={() => setFilter("grabber")}
+                                >
+                                    <span className="tree-icon">
+                                        <img src="/icons/Internet.png" alt="Grabber Project" />
+                                    </span>
+                                    <span className="tree-label">Grabber Project</span>
+                                    <span className="tree-count">{countForFilter("grabber")}</span>
+                                </div>
+                            </div>
+
+                            {/* 5. Danh sách chờ tải */}
+                            <div className="tree-node is-last-root">
+                                <div
+                                    className={`tree-item ${filter === "queue" ? "selected" : ""}`}
+                                    onClick={() => setFilter("queue")}
+                                >
+                                    <span
+                                        className="tree-toggle"
+                                        onClick={(e) => toggleExpand("queue", e)}
+                                        title={expanded.queue ? "Thu gọn" : "Mở rộng"}
+                                    >
+                                        {expanded.queue ? "−" : "+"}
+                                    </span>
+                                    <span className="tree-icon">
+                                        <img src="/icons/Opened_Folder.png" alt="Danh sách chờ tải" />
+                                    </span>
+                                    <span className="tree-label">Danh sách chờ tải</span>
+                                    <span className="tree-count">{countForFilter("queue")}</span>
+                                </div>
+
+                                {expanded.queue && (
+                                    <div className="tree-sub-group">
+                                        <div
+                                            className={`tree-item tree-sub-row ${filter === "queue:main" ? "selected" : ""}`}
+                                            onClick={() => setFilter("queue:main")}
+                                        >
+                                            <span className="tree-icon">
+                                                <img src="/icons/Opened_Folder.png" alt="Danh sách chờ tải chính" />
+                                            </span>
+                                            <span className="tree-label">Danh sách chờ tải chính</span>
+                                            <span className="tree-count">{countForFilter("queue:main")}</span>
+                                        </div>
+                                        <div
+                                            className={`tree-item tree-sub-row is-last ${filter === "queue:sync" ? "selected" : ""}`}
+                                            onClick={() => setFilter("queue:sync")}
+                                        >
+                                            <span className="tree-icon">
+                                                <img src="/icons/Downloads_Folder.png" alt="Đồng bộ danh sách chờ tải" />
+                                            </span>
+                                            <span className="tree-label">Đồng bộ danh sách chờ tải</span>
+                                            <span className="tree-count">{countForFilter("queue:sync")}</span>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
                 )}
@@ -404,85 +1142,79 @@ function App() {
                 {/* Table content */}
                 <div className="content">
                     <div className="table-wrapper">
-                        {filteredTasks.length > 0 ? (
-                            <table className="dl-table">
-                                <thead>
-                                    <tr>
-                                        <th className="col-icon"></th>
-                                        <th className="col-name">Tên tệp</th>
-                                        <th className="col-size">Kích thước</th>
-                                        <th className="col-progress">Tiến trình</th>
-                                        <th className="col-status">Trạng thái</th>
-                                        <th className="col-speed">Tốc độ</th>
-                                        <th className="col-eta">Còn lại</th>
-                                        <th className="col-source">Nguồn</th>
-                                        <th className="col-date">Ngày tải</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {filteredTasks.map((t) => {
-                                        const cat = getFileCategory(t.name);
-                                        const pct = t.total && t.total > 0 ? Math.min(100, Math.round((t.done / t.total) * 100)) : (t.state === "completed" ? 100 : 0);
-                                        const speed = rates[t.id] ?? 0;
-                                        const eta = speed > 0 && t.total ? (t.total - t.done) / speed : 0;
-                                        return (
-                                            <tr
-                                                key={t.id}
-                                                className={`row-data ${selectedId === t.id ? "selected" : ""}`}
-                                                onClick={() => setSelectedId(t.id)}
-                                                onDoubleClick={() => invoke("open_folder", { id: t.id }).catch(e => setMessage({ text: String(e), type: "error" }))}
-                                                onContextMenu={(e) => {
-                                                    e.preventDefault();
-                                                    e.stopPropagation();
-                                                    setSelectedId(t.id);
-                                                    setContextMenu({ x: e.clientX, y: e.clientY, taskId: t.id });
-                                                }}
-                                            >
-                                                <td className="col-icon">
-                                                    <span className={`file-icon ${cat}`}>{FILE_ICONS[cat]}</span>
-                                                </td>
-                                                <td className="col-name" title={t.name}>{t.name}</td>
-                                                <td className="col-size">{t.total ? bytes(t.total) : "—"}</td>
-                                                <td className="col-progress">
-                                                    <div className="progress-cell">
-                                                        <div className="progress-bar">
-                                                            <div
-                                                                className={`progress-fill ${t.state}`}
-                                                                style={{ width: `${pct}%` }}
-                                                            />
-                                                        </div>
-                                                        <span className="progress-text">{t.total ? `${pct}%` : "—"}</span>
-                                                    </div>
-                                                </td>
-                                                <td className="col-status">
-                                                    <span className={`status-text ${t.state}`}>{stateLabels[t.state] ?? t.state}</span>
-                                                </td>
-                                                <td className="col-speed">{speed > 0 ? bytes(speed) + "/s" : ""}</td>
-                                                <td className="col-eta">{eta > 0 ? formatETA(eta) : ""}</td>
-                                                <td className="col-source" title={t.source_host || ""}>
-                                                    <span className={`source-badge ${t.source || "manual"}`}>
-                                                        {t.source === "chrome" ? "🌐" : "📥"} {sourceLabel(t)}
+                        <table className="dl-table">
+                            <thead>
+                                <tr>
+                                    <th className="col-name">Tên tệp</th>
+                                    <th className="col-queue">Kiểu chờ tải</th>
+                                    <th className="col-size">Kích thước</th>
+                                    <th className="col-status">Trạng thái</th>
+                                    <th className="col-eta">Thời gian còn lại</th>
+                                    <th className="col-speed">Tốc độ tải xuống</th>
+                                    <th className="col-date">Ngày tải</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {filteredTasks.map((t) => {
+                                    const cat = getFileCategory(t.name);
+                                    const pct = t.total && t.total > 0 ? Math.min(100, Math.round((t.done / t.total) * 100)) : (t.state === "completed" ? 100 : 0);
+                                    const speed = rates[t.id] ?? 0;
+                                    const eta = speed > 0 && t.total ? (t.total - t.done) / speed : 0;
+                                    return (
+                                        <tr
+                                            key={t.id}
+                                            className={`row-data ${selectedId === t.id ? "selected" : ""}`}
+                                            onClick={() => setSelectedId(t.id)}
+                                            onDoubleClick={() => invoke("open_folder", { id: t.id }).catch(e => setMessage({ text: String(e), type: "error" }))}
+                                            onContextMenu={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                setSelectedId(t.id);
+                                                setContextMenu({ x: e.clientX, y: e.clientY, taskId: t.id });
+                                            }}
+                                        >
+                                            <td className="col-name" title={t.name}>
+                                                <div className="file-name-cell">
+                                                    <span className={`file-icon ${cat}`}>
+                                                        {FILE_ICONS[cat].img ? (
+                                                            <img src={FILE_ICONS[cat].img} alt="" />
+                                                        ) : (
+                                                            <Icon icon={FILE_ICONS[cat].icon!} width="18" height="18" />
+                                                        )}
                                                     </span>
-                                                </td>
-                                                <td className="col-date">{formatDate(t.created)}</td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
-                        ) : (
-                            <div className="empty-state">
-                                <div className="empty-icon">📥</div>
-                                {tasks.length === 0 ? (
-                                    <>
-                                        <p><strong>Sẵn sàng tải xuống</strong></p>
-                                        <p>Nhấn <strong>Thêm URL</strong> hoặc gửi link từ tiện ích MyDM trên Chrome.</p>
-                                    </>
-                                ) : (
-                                    <p>Không tìm thấy kết quả phù hợp.</p>
-                                )}
-                            </div>
-                        )}
+                                                    <span className="file-name-text">{t.name}</span>
+                                                </div>
+                                            </td>
+                                            <td className="col-queue">
+                                                {t.state === "queued" ? "Chính" : t.state === "held" ? "Đồng bộ" : "—"}
+                                            </td>
+                                            <td className="col-size">{t.total ? bytes(t.total) : "—"}</td>
+                                            <td className="col-status">
+                                                <span className={`status-text ${t.state}`}>
+                                                    {t.state === "running" ? `Đang tải (${pct}%)` : (stateLabels[t.state] ?? t.state)}
+                                                </span>
+                                            </td>
+                                            <td className="col-eta">
+                                                {t.state === "completed" ? "00:00:00" : (speed > 0 && eta > 0 ? formatETA(eta) : "—")}
+                                            </td>
+                                            <td className="col-speed">{speed > 0 ? bytes(speed) + "/s" : "—"}</td>
+                                            <td className="col-date">{formatDate(t.created)}</td>
+                                        </tr>
+                                    );
+                                })}
+                                {Array.from({ length: Math.max(0, 24 - filteredTasks.length) }).map((_, i) => (
+                                    <tr key={`empty-${i}`} className="row-empty">
+                                        <td>&nbsp;</td>
+                                        <td></td>
+                                        <td></td>
+                                        <td></td>
+                                        <td></td>
+                                        <td></td>
+                                        <td></td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
                     </div>
 
                     {/* Detail panel for selected task */}
@@ -530,6 +1262,7 @@ function App() {
             </div>
 
             {/* ── Status bar ── */}
+            {showStatusbar && (
             <div className="statusbar">
                 <div className="statusbar-left">
                     <span>{filteredTasks.length} tệp{filter !== "all" ? ` (lọc từ ${tasks.length})` : ""}</span>
@@ -540,6 +1273,7 @@ function App() {
                     <span>MyDM 0.2</span>
                 </div>
             </div>
+            )}
 
             {/* ── Context menu ── */}
             {contextMenu && (() => {
@@ -555,26 +1289,30 @@ function App() {
                             className={`context-menu-item ${!["paused", "failed", "held"].includes(t.state) ? "disabled" : ""}`}
                             onClick={() => { act(t.id, "resume"); setContextMenu(null); }}
                         >
-                            ▶️ Tiếp tục
+                            <img src="/icons/Download.png" alt="Tiếp tục" className="menu-icon" />
+                            <span>Tiếp tục</span>
                         </div>
                         <div
                             className={`context-menu-item ${!["running", "queued", "held"].includes(t.state) ? "disabled" : ""}`}
                             onClick={() => { act(t.id, "pause"); setContextMenu(null); }}
                         >
-                            ⏸️ Tạm dừng
+                            <img src="/icons/Stop.png" alt="Tạm dừng" className="menu-icon" />
+                            <span>Tạm dừng</span>
                         </div>
                         <div
                             className={`context-menu-item ${!["running", "queued", "held", "paused", "failed"].includes(t.state) ? "disabled" : ""}`}
                             onClick={() => { act(t.id, "cancel"); setContextMenu(null); }}
                         >
-                            ⏹️ Hủy bỏ
+                            <img src="/icons/Cancel.png" alt="Hủy bỏ" className="menu-icon" />
+                            <span>Hủy bỏ</span>
                         </div>
                         <div className="context-menu-sep" />
                         <div
                             className={`context-menu-item ${!["failed", "paused", "cancelled"].includes(t.state) ? "disabled" : ""}`}
                             onClick={() => { act(t.id, "restart"); setContextMenu(null); }}
                         >
-                            🔄 Tải lại từ đầu
+                            <img src="/icons/Restart.png" alt="Tải lại từ đầu" className="menu-icon" />
+                            <span>Tải lại từ đầu</span>
                         </div>
                         <div className="context-menu-sep" />
                         <div
@@ -584,14 +1322,16 @@ function App() {
                                 setContextMenu(null);
                             }}
                         >
-                            📂 Mở thư mục
+                            <img src="/icons/Opened_Folder.png" alt="Mở thư mục" className="menu-icon" />
+                            <span>Mở thư mục</span>
                         </div>
                         <div className="context-menu-sep" />
                         <div
                             className={`context-menu-item ${["running", "pausing", "cancelling"].includes(t.state) ? "disabled" : ""}`}
                             onClick={() => { act(t.id, "delete"); setContextMenu(null); }}
                         >
-                            🗑️ Xóa lịch sử
+                            <img src="/icons/Trash_Can.png" alt="Xóa lịch sử" className="menu-icon" />
+                            <span>Xóa lịch sử</span>
                         </div>
                     </div>
                 );
