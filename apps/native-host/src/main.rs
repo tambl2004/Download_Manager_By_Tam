@@ -5,7 +5,7 @@ fn handle(v: Value) -> anyhow::Result<Value> {
     match v["op"].as_str().unwrap_or("") {
         "ping" => Ok(json!({"ok":true,"version":2})),
         "add" => {
-            let t = s.add(
+            let t = s.add_full(
                 v["url"].as_str().unwrap_or(""),
                 v["name"].as_str().unwrap_or(""),
                 v["id"].as_str(),
@@ -13,6 +13,8 @@ fn handle(v: Value) -> anyhow::Result<Value> {
                 v["cookies"].as_str(),
                 v["referer"].as_str(),
                 v["source"].as_str().unwrap_or("chrome"),
+                v["category"].as_str(),
+                v["total"].as_u64(),
             )?;
             Ok(json!({"ok":true,"id":t.id,"state":t.state,"version":2}))
         }

@@ -129,6 +129,22 @@ impl Store {
         referer: Option<&str>,
         source: &str,
     ) -> Result<Task> {
+        self.add_full(url, name, key, hold, cookies, referer, source, None, None)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn add_full(
+        &self,
+        url: &str,
+        name: &str,
+        key: Option<&str>,
+        hold: bool,
+        cookies: Option<&str>,
+        referer: Option<&str>,
+        source: &str,
+        category: Option<&str>,
+        total: Option<u64>,
+    ) -> Result<Task> {
         let u = reqwest::Url::parse(url)?;
         if !matches!(u.scheme(), "http" | "https")
             || !u.username().is_empty()
@@ -159,7 +175,7 @@ impl Store {
             folder: s.folder,
             state: if hold { "held" } else { "queued" }.into(),
             error: String::new(),
-            total: None,
+            total,
             done: 0,
             etag: None,
             ranges: vec![],
@@ -173,12 +189,75 @@ impl Store {
             cookies: cookies.map(|s| s.to_string()).filter(|s| !s.is_empty()),
             referer: referer.map(|s| s.to_string()).filter(|s| !s.is_empty()),
             content_disposition_name: None,
+            category: category.map(|c| c.to_string()),
+            description: None,
+            part_dones: vec![],
         };
         self.db()?.execute(
             "INSERT OR IGNORE INTO tasks VALUES(?1,?2,?3)",
             params![id, t.state, serde_json::to_string(&t)?],
         )?;
         self.get(&id)
+    }
+
+    pub fn add_with_options(
+        &self,
+        url: &str,
+        name: &str,
+        folder: Option<&str>,
+        hold: bool,
+        category: Option<&str>,
+        total: Option<u64>,
+    ) -> Result<Task> {
+        let mut t = self.add_full(url, name, None, hold, None, None, "manual", category, total)?;
+        if let Some(f) = folder {
+            let f_trim = f.trim();
+            if !f_trim.is_empty() {
+                t.folder = f_trim.to_string();
+                let c = self.db()?;
+                c.execute(
+                    "UPDATE tasks SET data = ?1 WHERE id = ?2",
+                    rusqlite::params![serde_json::to_string(&t)?, t.id],
+                )?;
+            }
+        }
+        Ok(t)
+    }
+
+    pub fn update_held_task(
+        &self,
+        id: &str,
+        name: Option<&str>,
+        folder: Option<&str>,
+        category: Option<&str>,
+        total: Option<u64>,
+    ) -> Result<Task> {
+        let mut t = self.get(id)?;
+        if let Some(n) = name {
+            let n_trim = n.trim();
+            if !n_trim.is_empty() {
+                t.name = safe_name(n_trim);
+            }
+        }
+        if let Some(f) = folder {
+            let f_trim = f.trim();
+            if !f_trim.is_empty() {
+                t.folder = f_trim.to_string();
+            }
+        }
+        if let Some(c) = category {
+            let c_trim = c.trim();
+            if !c_trim.is_empty() {
+                t.category = Some(c_trim.to_string());
+            }
+        }
+        if let Some(tot) = total {
+            if tot > 0 {
+                t.total = Some(tot);
+            }
+        }
+        self.metadata(&t)?;
+        Ok(t)
     }
 
     pub fn list(&self) -> Result<Vec<Task>> {
@@ -270,6 +349,21 @@ impl Store {
                 if p.exists() {
                     fs::remove_dir_all(p)?
                 };
+                c.execute("DELETE FROM tasks WHERE id=?1", [id])?;
+            }
+            "delete_file" => {
+                let t = self.get(id)?;
+                if matches!(t.state.as_str(), "running" | "pausing" | "cancelling") {
+                    bail!("Chờ tác vụ dừng trước")
+                };
+                let p = self.root.join("parts").join(id);
+                if p.exists() {
+                    let _ = fs::remove_dir_all(p);
+                };
+                let target_file = Path::new(&t.folder).join(&t.name);
+                if target_file.exists() {
+                    let _ = fs::remove_file(target_file);
+                }
                 c.execute("DELETE FROM tasks WHERE id=?1", [id])?;
             }
             _ => bail!("Lệnh không hợp lệ"),

@@ -85,3 +85,32 @@ test('source field is set to chrome',async()=>{
   const e=env();await e.run();
   assert.ok(e.calls.includes('source:chrome'));
 });
+test('downloadMedia operation sends task to native host with source chrome', async () => {
+  let msgListener;
+  const calls = [];
+  const chrome = {
+    runtime: {
+      lastError: null,
+      onInstalled: { addListener() {} },
+      onMessage: { addListener(fn) { msgListener = fn; } },
+      sendNativeMessage(_, m, cb) {
+        calls.push(m.op);
+        if (m.source) calls.push('source:' + m.source);
+        cb({ ok: true, id: m.id, version: 2 });
+      }
+    },
+    contextMenus: { create() {}, onClicked: { addListener() {} } },
+    storage: { local: { async get() { return {}; }, async set() {} } },
+    downloads: { onCreated: { addListener() {} } },
+    permissions: { async contains() { return false; } }
+  };
+  vm.runInNewContext(code, { chrome, URL, crypto: require('node:crypto').webcrypto });
+  assert.ok(msgListener);
+  await new Promise((resolve) => {
+    msgListener({ op: 'downloadMedia', stream: { url: 'https://video.example.com/test.mp4', name: 'test.mp4' } }, {}, (res) => {
+      resolve(res);
+    });
+  });
+  assert.ok(calls.includes('add'));
+  assert.ok(calls.includes('source:chrome'));
+});

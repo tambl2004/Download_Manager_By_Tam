@@ -18,10 +18,19 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             list,
             add,
+            add_task_advanced,
+            update_held_task,
+            probe,
+            pick_folder,
             action,
             settings,
             save_settings,
-            open_folder
+            open_folder,
+            open_file,
+            open_with,
+            open_folder_select,
+            focus_window,
+            confirm_delete_dialog
         ])
         .run(tauri::generate_context!());
 

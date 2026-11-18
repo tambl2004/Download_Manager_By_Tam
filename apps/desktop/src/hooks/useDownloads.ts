@@ -61,15 +61,6 @@ export function useDownloads(setMessage: (msg: MessageState) => void) {
     }, [refresh]);
 
     const act = useCallback(async (id: string, action: string) => {
-        if (
-            ["delete", "restart"].includes(action) &&
-            !confirm(
-                action === "delete"
-                    ? "Xóa lịch sử và phần tải dở? File đã hoàn tất được giữ lại."
-                    : "Xóa phần tải dở và tải lại từ đầu?"
-            )
-        )
-            return;
         try {
             await tauriClient.taskAction(id, action);
             await refresh();

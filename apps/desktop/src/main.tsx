@@ -18,6 +18,8 @@ import {
     StatusBar,
     ContextMenu,
     AddDialog,
+    DownloadProgressDialog,
+    DownloadCompleteDialog,
     SettingsDialog,
     MessageBar,
 } from "./view";
@@ -80,10 +82,108 @@ function App() {
     const [currentFont, setCurrentFont] = useState<string>("");
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; taskId: string } | null>(null);
 
+    // Dialogs for IDM-style download workflow (v0.3)
+    const [progressTaskId, setProgressTaskId] = useState<string | null>(null);
+    const [completedTaskId, setCompletedTaskId] = useState<string | null>(null);
+    const prevTaskStates = useRef<Record<string, string>>({});
+    const pendingHeldTaskId = useRef<string | null>(null);
+    const promptedTaskIds = useRef<Set<string>>(new Set());
+
+    // Automatically transition from Progress Dialog to Complete Dialog when download finishes
+    useEffect(() => {
+        for (const t of tasks) {
+            const prev = prevTaskStates.current[t.id];
+            if (prev === "running" && t.state === "completed") {
+                if (progressTaskId === t.id) {
+                    setProgressTaskId(null);
+                    setCompletedTaskId(t.id);
+                }
+            }
+            prevTaskStates.current[t.id] = t.state;
+        }
+    }, [tasks, progressTaskId]);
+
+    // Detect held task from Chrome extension and pop up AddDialog + focus window
+    useEffect(() => {
+        const heldChromeTask = tasks.find(
+            (t) => t.source === "chrome" && t.state === "held" && !promptedTaskIds.current.has(t.id)
+        );
+
+        if (heldChromeTask) {
+            promptedTaskIds.current.add(heldChromeTask.id);
+            pendingHeldTaskId.current = heldChromeTask.id;
+            setAddUrl(heldChromeTask.url);
+            setAddName(heldChromeTask.name);
+            setAddCategory(heldChromeTask.category || (heldChromeTask.name.match(/\.(mp4|mkv|webm|avi|flv)/i) ? "Video" : undefined));
+            setAddTotal(heldChromeTask.total ?? null);
+            setShowAddDialog(true);
+            void tauriClient.focusWindow();
+        }
+    }, [tasks]);
+
+    // Handle double-clicking a task in the table
+    const handleDoubleClickTask = useCallback((t: any) => {
+        if (t.state === "completed") {
+            setCompletedTaskId(t.id);
+        } else if (t.state === "held") {
+            pendingHeldTaskId.current = t.id;
+            setAddUrl(t.url);
+            setAddName(t.name);
+            setAddCategory(t.category || (t.name.match(/\.(mp4|mkv|webm|avi|flv)/i) ? "Video" : undefined));
+            setAddTotal(t.total ?? null);
+            setShowAddDialog(true);
+        } else {
+            setProgressTaskId(t.id);
+        }
+    }, []);
+
+    // Intercept action to show native Windows confirmation dialog for delete
+    const handleAct = useCallback(async (id: string, action: string) => {
+        if (action === "delete") {
+            const target = tasks.find((t) => t.id === id);
+            if (target) {
+                try {
+                    const choice = await tauriClient.confirmDeleteDialog(target.name);
+                    if (choice === "DELETE_ONLY") {
+                        await act(id, "delete");
+                        setMessage({
+                            text: `Đã xóa "${target.name}" khỏi danh sách`,
+                            type: "success",
+                        });
+                    } else if (choice === "DELETE_FILE") {
+                        await act(id, "delete_file");
+                        setMessage({
+                            text: `Đã xóa "${target.name}" khỏi danh sách và thư mục`,
+                            type: "success",
+                        });
+                    }
+                } catch {
+                    await act(id, "delete");
+                }
+                return;
+            }
+        }
+        await act(id, action);
+    }, [tasks, act, setMessage]);
+
     // Add dialog input state
     const [addUrl, setAddUrl] = useState("");
     const [addName, setAddName] = useState("");
+    const [addCategory, setAddCategory] = useState<string | undefined>(undefined);
+    const [addTotal, setAddTotal] = useState<number | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const handleCloseAddDialog = useCallback(() => {
+        if (pendingHeldTaskId.current) {
+            void tauriClient.taskAction(pendingHeldTaskId.current, "delete");
+            pendingHeldTaskId.current = null;
+        }
+        setShowAddDialog(false);
+        setAddUrl("");
+        setAddName("");
+        setAddCategory(undefined);
+        setAddTotal(null);
+    }, []);
 
     // Close context menu on click outside
     useEffect(() => {
@@ -115,20 +215,60 @@ function App() {
         };
     }, []);
 
-    const handleAdd = useCallback(async () => {
+    const handleAdd = useCallback(async (
+        startNow: boolean = true,
+        targetFolder?: string,
+        category?: string,
+        total?: number
+    ) => {
         const trimUrl = addUrl.trim();
         const trimName = addName.trim();
         if (!trimUrl) return;
+
+        const heldId = pendingHeldTaskId.current;
+        pendingHeldTaskId.current = null;
+
         try {
-            await tauriClient.addTask(trimUrl, trimName);
+            if (heldId) {
+                await tauriClient.updateHeldTask(
+                    heldId,
+                    trimName || undefined,
+                    targetFolder || undefined,
+                    category || addCategory || undefined,
+                    total ?? (addTotal !== null ? addTotal : undefined),
+                    startNow
+                );
+                if (startNow) {
+                    setProgressTaskId(heldId);
+                }
+            } else {
+                const newTask = await tauriClient.addTaskAdvanced(
+                    trimUrl,
+                    trimName,
+                    !startNow,
+                    targetFolder,
+                    category || addCategory,
+                    total ?? (addTotal !== null ? addTotal : undefined)
+                );
+                if (startNow && newTask?.id) {
+                    setProgressTaskId(newTask.id);
+                }
+            }
+
             setAddUrl("");
             setAddName("");
+            setAddCategory(undefined);
+            setAddTotal(null);
             setShowAddDialog(false);
             await refresh();
+            setMessage({
+                text: startNow ? "Đã bắt đầu tải xuống" : "Đã thêm vào danh sách tải sau",
+                type: "success",
+            });
         } catch (e) {
             setMessage({ text: String(e), type: "error" });
         }
-    }, [addUrl, addName, refresh]);
+    }, [addUrl, addName, addCategory, addTotal, refresh, setMessage]);
 
     const exportUrls = useCallback((format: "ef2" | "txt") => {
         const urls = tasks.map((t) => t.url).filter(Boolean);
@@ -197,7 +337,7 @@ function App() {
                 tasks={tasks}
                 activeMenu={activeMenu}
                 setActiveMenu={setActiveMenu}
-                act={act}
+                act={handleAct}
                 setMessage={setMessage}
                 setShowAddDialog={setShowAddDialog}
                 setAddUrl={setAddUrl}
@@ -228,7 +368,7 @@ function App() {
                 toolbarBtnSize={toolbarBtnSize}
                 tasks={tasks}
                 selectedTask={selectedTask}
-                act={act}
+                act={handleAct}
                 setShowAddDialog={setShowAddDialog}
                 setShowSettings={setShowSettings}
                 setMessage={setMessage}
@@ -256,6 +396,7 @@ function App() {
                         setSelectedId={setSelectedId}
                         setContextMenu={setContextMenu}
                         setMessage={setMessage}
+                        onDoubleClickTask={handleDoubleClickTask}
                     />
 
                     <TaskDetail selectedTask={selectedTask} rates={rates} />
@@ -275,20 +416,40 @@ function App() {
                 contextMenu={contextMenu}
                 setContextMenu={setContextMenu}
                 tasks={tasks}
-                act={act}
+                act={handleAct}
                 setMessage={setMessage}
             />
 
             <AddDialog
                 show={showAddDialog}
-                onClose={() => setShowAddDialog(false)}
+                onClose={handleCloseAddDialog}
                 addUrl={addUrl}
                 setAddUrl={setAddUrl}
                 addName={addName}
                 setAddName={setAddName}
                 configFolder={config?.folder}
+                initialCategory={addCategory}
+                initialTotal={addTotal}
                 onAdd={handleAdd}
             />
+
+            {progressTaskId && (
+                <DownloadProgressDialog
+                    task={tasks.find((t) => t.id === progressTaskId)}
+                    rate={rates[progressTaskId] ?? 0}
+                    onClose={() => setProgressTaskId(null)}
+                    onPause={(id) => handleAct(id, "pause")}
+                    onResume={(id) => handleAct(id, "resume")}
+                    onCancel={(id) => handleAct(id, "cancel")}
+                />
+            )}
+
+            {completedTaskId && (
+                <DownloadCompleteDialog
+                    task={tasks.find((t) => t.id === completedTaskId)}
+                    onClose={() => setCompletedTaskId(null)}
+                />
+            )}
 
             <SettingsDialog
                 show={showSettings}

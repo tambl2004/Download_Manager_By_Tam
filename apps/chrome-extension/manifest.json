@@ -1,20 +1,56 @@
 {
     "manifest_version": 3,
-    "name": "MyDM — Chrome Bridge",
-    "version": "0.2.0",
-    "description": "Gửi link HTTP/HTTPS đến MyDM trên Windows. Hỗ trợ tải bằng phiên đăng nhập.",
+    "name": "MyDM Integration Module",
+    "version": "0.3.0",
+    "description": "Tích hợp tải xuống thông minh và bắt video từ mọi trang web cho MyDM trên Windows.",
     "permissions": [
         "nativeMessaging",
         "downloads",
         "contextMenus",
-        "storage"
+        "storage",
+        "cookies",
+        "webRequest"
     ],
-    "optional_host_permissions": [
-        "https://*/*",
-        "http://*/*"
+    "host_permissions": [
+        "http://*/*",
+        "https://*/*"
     ],
-    "optional_permissions": [
-        "cookies"
+    "content_scripts": [
+        {
+            "matches": [
+                "*://*.youtube.com/*"
+            ],
+            "js": [
+                "yt_injected.js"
+            ],
+            "world": "MAIN",
+            "run_at": "document_start"
+        },
+        {
+            "matches": [
+                "http://*/*",
+                "https://*/*"
+            ],
+            "js": [
+                "content.js"
+            ],
+            "css": [
+                "content.css"
+            ],
+            "run_at": "document_idle"
+        }
+    ],
+    "web_accessible_resources": [
+        {
+            "resources": [
+                "icons/*",
+                "yt_injected.js"
+            ],
+            "matches": [
+                "http://*/*",
+                "https://*/*"
+            ]
+        }
     ],
     "background": {
         "service_worker": "background.js",

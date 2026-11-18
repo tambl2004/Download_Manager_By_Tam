@@ -15,18 +15,88 @@ pub fn snapshot(s: &Store) -> Result<Vec<Task>> {
     let mut ts = s.list()?;
     for t in &mut ts {
         if t.state != "completed" {
-            t.done = (0..t.ranges.len())
+            let dones: Vec<u64> = (0..t.ranges.len())
                 .map(|i| {
                     fs::metadata(s.root.join("parts").join(&t.id).join(format!("{i}.part")))
                         .map(|m| m.len())
                         .unwrap_or(0)
                 })
-                .sum();
+                .collect();
+            t.done = dones.iter().sum();
+            t.part_dones = dones;
+        } else {
+            t.part_dones = t
+                .ranges
+                .iter()
+                .map(|(a, b)| if *b == u64::MAX { t.done } else { b - a + 1 })
+                .collect();
         }
         // Never expose cookies to UI
         t.cookies = None;
     }
     Ok(ts)
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Default)]
+pub struct ProbeResult {
+    pub size: Option<u64>,
+    pub filename: Option<String>,
+    pub mime_type: Option<String>,
+}
+
+pub fn probe_url(url: &str) -> Result<ProbeResult> {
+    let u = reqwest::Url::parse(url)?;
+    if !matches!(u.scheme(), "http" | "https") {
+        anyhow::bail!("Chỉ nhận URL HTTP/HTTPS");
+    }
+    let c = downloader::client()?;
+    let resp = c
+        .get(url)
+        .header(reqwest::header::ACCEPT_ENCODING, "identity")
+        .header(reqwest::header::RANGE, "bytes=0-0")
+        .send()?;
+
+    let mut size = None;
+    if resp.status().as_u16() == 206 {
+        if let Some(range_header) = resp.headers().get(reqwest::header::CONTENT_RANGE) {
+            if let Ok(range_str) = range_header.to_str() {
+                if let Some((_, _, total)) = parse_range(range_str) {
+                    size = Some(total);
+                }
+            }
+        }
+    }
+    if size.is_none() {
+        if let Some(cl) = resp.headers().get(reqwest::header::CONTENT_LENGTH) {
+            if let Ok(cl_str) = cl.to_str() {
+                size = cl_str.parse().ok();
+            }
+        }
+    }
+    if size.is_none() {
+        if let Some(clen_str) = u.query_pairs().find(|(k, _)| k == "clen").map(|(_, v)| v) {
+            size = clen_str.parse().ok();
+        }
+    }
+
+    let mut filename = None;
+    if let Some(cd) = resp.headers().get(reqwest::header::CONTENT_DISPOSITION) {
+        if let Ok(cd_str) = cd.to_str() {
+            filename = parse_content_disposition(cd_str);
+        }
+    }
+
+    let mime_type = resp
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|ct| ct.to_str().ok())
+        .map(String::from);
+
+    Ok(ProbeResult {
+        size,
+        filename,
+        mime_type,
+    })
 }
 
 #[cfg(test)]

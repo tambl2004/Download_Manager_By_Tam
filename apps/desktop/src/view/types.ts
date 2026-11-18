@@ -11,9 +11,13 @@ export type Task = {
     done: number;
     created: number;
     ranges: [number, number][];
+    etag?: string | null;
     source: string;
     source_host: string;
     content_disposition_name: string | null;
+    category?: string | null;
+    description?: string | null;
+    part_dones?: number[];
 };
 
 export type Config = {
@@ -115,4 +119,21 @@ export const SUB_CATEGORIES = [
     { key: "music" as const, label: "Âm nhạc", img: "/icons/Music.png" },
     { key: "program" as const, label: "Chương trình", img: "/icons/Services.png" },
     { key: "video" as const, label: "Video", img: "/icons/Video.png" },
+];
+
+export interface IDMCategory {
+    id: string;
+    label: string;
+    folderSubdir: string;
+    fileCat: FileCategory;
+    icon: string;
+}
+
+export const IDM_CATEGORIES: IDMCategory[] = [
+    { id: "general", label: "Chung", folderSubdir: "Chung", fileCat: "other", icon: "/icons/File.png" },
+    { id: "archive", label: "Dữ liệu nén", folderSubdir: "Dữ liệu nén", fileCat: "archive", icon: "/icons/Archive_Folder.png" },
+    { id: "document", label: "Tài liệu", folderSubdir: "Tài liệu", fileCat: "document", icon: "/icons/Document.png" },
+    { id: "music", label: "Âm nhạc", folderSubdir: "Âm nhạc", fileCat: "music", icon: "/icons/Music.png" },
+    { id: "program", label: "Chương trình", folderSubdir: "Chương trình", fileCat: "program", icon: "/icons/Services.png" },
+    { id: "video", label: "Video", folderSubdir: "Video", fileCat: "video", icon: "/icons/Video.png" },
 ];

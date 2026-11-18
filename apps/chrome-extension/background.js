@@ -245,8 +245,37 @@ function matchesDomain(hostname, domainList, allowSubdomains) {
   });
 }
 
-// ── Message handler for popup ──
+// ── Message handler for popup and content script ──
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message.op === "downloadMedia") {
+    (async () => {
+      try {
+        const stream = message.stream || {};
+        const url = stream.url;
+        if (!url) return sendResponse({ ok: false, error: "Thiếu URL" });
+        const cookies = await getCookiesForUrl(url);
+        const referer = stream.referer || null;
+        const res = await native({
+          op: "add",
+          url,
+          name: stream.name || "",
+          id: crypto.randomUUID(),
+          hold: true,
+          cookies: cookies || undefined,
+          referer: referer || undefined,
+          source: "chrome",
+          category: stream.category || "Video",
+          total: stream.size || undefined,
+        });
+        await status("Đã gửi yêu cầu tải video đến MyDM.");
+        sendResponse({ ok: true, id: res.id });
+      } catch (e) {
+        sendResponse({ ok: false, error: String(e) });
+      }
+    })();
+    return true;
+  }
+
   if (message.op === "ping") {
     native({ op: "ping" })
       .then((r) =>
@@ -305,3 +334,67 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 });
+
+// ── Media Sniffing Engine via webRequest (v0.3) ──
+let isSniffingEnabled = true;
+chrome.storage?.local?.get?.(["mode", "automatic", "enabled"], (res) => {
+  if (res) {
+    isSniffingEnabled = res.mode !== "off" && res.automatic !== false && res.enabled !== false;
+  }
+});
+chrome.storage?.onChanged?.addListener?.((changes, area) => {
+  if (area === "local" && (changes.mode || changes.automatic || changes.enabled)) {
+    chrome.storage?.local?.get?.(["mode", "automatic", "enabled"], (res) => {
+      if (res) {
+        isSniffingEnabled = res.mode !== "off" && res.automatic !== false && res.enabled !== false;
+      }
+    });
+  }
+});
+
+if (chrome.webRequest?.onResponseStarted?.addListener) {
+  try {
+    chrome.webRequest.onResponseStarted.addListener(
+      (details) => {
+        if (!isSniffingEnabled) return;
+        if (!details.tabId || details.tabId < 0) return;
+        const url = details.url;
+        if (!url || !url.startsWith("http")) return;
+
+        let contentType = "";
+        let contentLength = 0;
+        for (const h of details.responseHeaders || []) {
+          const name = h.name.toLowerCase();
+          if (name === "content-type") contentType = h.value.toLowerCase();
+          if (name === "content-length") contentLength = parseInt(h.value, 10) || 0;
+        }
+
+        const isMedia =
+          contentType.startsWith("video/") ||
+          contentType.startsWith("audio/") ||
+          contentType.includes("application/vnd.apple.mpegurl") ||
+          contentType.includes("application/x-mpegurl") ||
+          contentType.includes("application/dash+xml") ||
+          /\.(mp4|mkv|webm|m4v|flv|ts|m3u8|mp3|m4a|aac)(\?.*)?$/i.test(url);
+
+        if (isMedia) {
+          chrome.tabs.sendMessage(details.tabId, {
+            type: "MEDIA_DETECTED",
+            stream: {
+              url,
+              mimeType: contentType,
+              size: contentLength || undefined,
+            },
+          }).catch(() => {
+            // Tab content script might not be loaded yet
+          });
+        }
+      },
+      { urls: ["<all_urls>"] },
+      ["responseHeaders"]
+    );
+  } catch {
+    // ignore
+  }
+}
+

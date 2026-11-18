@@ -203,7 +203,6 @@ pub fn download(s: &Store, t: &mut Task, stop: &Arc<AtomicBool>) -> Result<()> {
         t.etag = etag(&r);
         if r.status().as_u16() == 206
             && range.map(|v| v.0 == 0 && v.1 == 0).unwrap_or(false)
-            && t.etag.is_some()
         {
             let n = range.map(|v| v.2).unwrap_or(0);
             t.total = Some(n);
@@ -223,6 +222,10 @@ pub fn download(s: &Store, t: &mut Task, stop: &Arc<AtomicBool>) -> Result<()> {
                     }
                 })
                 .collect();
+        } else if let Some(n) = t.total.or_else(|| r.content_length()) {
+            t.total = Some(n);
+            t.etag = None;
+            t.ranges = vec![(0, u64::MAX)];
         } else {
             t.total = None;
             t.etag = None;
@@ -296,12 +299,10 @@ pub fn download(s: &Store, t: &mut Task, stop: &Arc<AtomicBool>) -> Result<()> {
                 } else {
                     let mut req = c.get(&task.url).header(header::ACCEPT_ENCODING, "identity");
                     if cap.is_some() {
-                        req = req
-                            .header(header::RANGE, format!("bytes={}-{}", a + offset, b))
-                            .header(
-                                header::IF_RANGE,
-                                task.etag.clone().ok_or_else(|| anyhow!("Thiếu ETag"))?,
-                            );
+                        req = req.header(header::RANGE, format!("bytes={}-{}", a + offset, b));
+                        if let Some(ref et) = task.etag {
+                            req = req.header(header::IF_RANGE, et);
+                        }
                     }
                     req.send().map_err(|_| anyhow!("Kết nối thất bại"))
                 };
@@ -343,7 +344,7 @@ pub fn download(s: &Store, t: &mut Task, stop: &Arc<AtomicBool>) -> Result<()> {
                         .and_then(parse_range);
                     if r.status().as_u16() != 206
                         || got != Some((a + offset, b, task.total.unwrap_or(0)))
-                        || etag(&r) != task.etag
+                        || (task.etag.is_some() && etag(&r) != task.etag)
                     {
                         bail!("Range hoặc ETag thay đổi. Dùng Tải lại từ đầu.")
                     };

@@ -7,5 +7,7 @@ export * from "./TaskDetail";
 export * from "./StatusBar";
 export * from "./ContextMenu";
 export * from "./AddDialog";
+export * from "./DownloadProgressDialog";
+export * from "./DownloadCompleteDialog";
 export * from "./SettingsDialog";
 export * from "./MessageBar";

@@ -10,6 +10,7 @@ interface TaskTableProps {
     setSelectedId: (id: string) => void;
     setContextMenu: (ctx: { x: number; y: number; taskId: string } | null) => void;
     setMessage: (msg: MessageState) => void;
+    onDoubleClickTask?: (task: Task) => void;
 }
 
 export const TaskTable: React.FC<TaskTableProps> = ({
@@ -19,6 +20,7 @@ export const TaskTable: React.FC<TaskTableProps> = ({
     setSelectedId,
     setContextMenu,
     setMessage,
+    onDoubleClickTask,
 }) => {
     return (
         <div className="table-wrapper">
@@ -45,7 +47,13 @@ export const TaskTable: React.FC<TaskTableProps> = ({
                                 key={t.id}
                                 className={`row-data ${selectedId === t.id ? "selected" : ""}`}
                                 onClick={() => setSelectedId(t.id)}
-                                onDoubleClick={() => invoke("open_folder", { id: t.id }).catch(e => setMessage({ text: String(e), type: "error" }))}
+                                onDoubleClick={() => {
+                                    if (onDoubleClickTask) {
+                                        onDoubleClickTask(t);
+                                    } else {
+                                        invoke("open_folder", { id: t.id }).catch(e => setMessage({ text: String(e), type: "error" }));
+                                    }
+                                }}
                                 onContextMenu={(e) => {
                                     e.preventDefault();
                                     e.stopPropagation();

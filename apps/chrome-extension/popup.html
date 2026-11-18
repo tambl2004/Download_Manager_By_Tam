@@ -5,91 +5,77 @@
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
+    <!-- Header -->
     <div class="header">
-      <img src="icons/icon128.png" class="header-logo" alt="MyDM Logo" />
+      <img src="icons/icon128.png" class="header-logo" alt="MyDM" />
       <div>
-        <h2>MyDM Chrome Bridge</h2>
-        <span class="version">Phiên bản 0.2</span>
+        <h2>MyDM Integration Module</h2>
+        <span class="version">Phiên bản 0.3 (Toàn quyền truy cập)</span>
       </div>
     </div>
 
-    <!-- Diagnostics -->
-    <div class="section">
-      <h3>Chẩn đoán kết nối</h3>
-      <button id="ping" class="btn-primary">Kiểm tra kết nối</button>
-      <div id="diagnostics" class="diagnostics" style="display:none">
-        <div class="diag-row">
-          <span>Extension → Native host:</span>
-          <span id="diag-host" class="diag-status">—</span>
-        </div>
-        <div class="diag-row">
-          <span>Phiên bản giao thức:</span>
-          <span id="diag-version">—</span>
-        </div>
+    <!-- Master Toggle Card -->
+    <div class="card toggle-card">
+      <div class="toggle-info">
+        <span class="toggle-title">Bắt liên kết & tải video</span>
+        <span class="toggle-subtitle">Tự động phát hiện trên mọi website</span>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="masterToggle" checked />
+        <span class="slider round"></span>
+      </label>
+    </div>
+
+    <!-- Connection Status Card -->
+    <div class="card status-card">
+      <div class="status-indicator-row">
+        <span id="hostIndicator" class="status-dot green"></span>
+        <span id="hostStatusText" class="status-text-bold">Đang kiểm tra kết nối...</span>
+      </div>
+      <div class="status-meta">
+        <span>Giao thức Host: <strong id="diag-version">—</strong></span>
+        <button id="ping" class="btn-link">Kiểm tra lại</button>
       </div>
     </div>
 
-    <hr />
+    <!-- Advanced Settings (Collapsible) -->
+    <details class="advanced-details">
+      <summary class="advanced-summary">Tùy chọn nâng cao</summary>
+      
+      <div class="section">
+        <h3>Chế độ bắt liên kết</h3>
+        <label class="radio-label">
+          <input type="radio" name="mode" value="auto" checked />
+          <span><strong>Tự chuyển</strong> — Tự động chuyển link sang MyDM</span>
+        </label>
+        <label class="radio-label">
+          <input type="radio" name="mode" value="ask" />
+          <span><strong>Hỏi trước</strong> — Hiện hộp thoại xác nhận</span>
+        </label>
+        <label class="radio-label">
+          <input type="radio" name="mode" value="off" />
+          <span><strong>Tắt</strong> — Chỉ tải qua menu chuột phải</span>
+        </label>
+      </div>
 
-    <!-- Mode selection -->
-    <div class="section">
-      <h3>Chế độ nhận link</h3>
-      <label class="radio-label">
-        <input type="radio" name="mode" value="off" checked />
-        <span><strong>Tắt</strong> — Chỉ tải bằng chuột phải</span>
-      </label>
-      <label class="radio-label">
-        <input type="radio" name="mode" value="ask" />
-        <span><strong>Hỏi trước</strong> — Ghi nhận tác vụ, bạn xác nhận trong MyDM</span>
-      </label>
-      <label class="radio-label">
-        <input type="radio" name="mode" value="auto" />
-        <span><strong>Tự chuyển</strong> — Tự động chuyển theo quy tắc bên dưới</span>
-      </label>
-    </div>
-
-    <hr />
-
-    <!-- Domain rules -->
-    <div class="section">
-      <h3>Quy tắc tên miền</h3>
-      <label class="field-label">
-        Website được phép (mỗi dòng một tên miền):
-        <textarea id="allowDomains" placeholder="example.com&#10;cdn.example.com" rows="3"></textarea>
-      </label>
-      <label class="field-label">
-        Website loại trừ:
+      <div class="section">
+        <h3>Quy tắc tên miền loại trừ</h3>
         <textarea id="blockDomains" placeholder="accounts.google.com" rows="2"></textarea>
-      </label>
-      <label class="checkbox-label">
-        <input type="checkbox" id="allowSubdomains" />
-        Áp dụng cho cả tên miền phụ (*.example.com)
-      </label>
-    </div>
+      </div>
 
-    <hr />
+      <div class="section">
+        <h3>Phiên đăng nhập (Cookies)</h3>
+        <p class="help-text">Website được cấp cookie (mỗi dòng một domain):</p>
+        <textarea id="sessionSites" placeholder="drive.google.com&#10;fshare.vn" rows="2"></textarea>
+        <div class="cookie-btn-row">
+          <button id="grantCookies" class="btn-secondary">Cấp quyền</button>
+          <button id="revokeCookies" class="btn-danger">Thu hồi</button>
+        </div>
+        <p id="cookieStatus" class="status-text"></p>
+      </div>
 
-    <!-- Session/Cookie settings -->
-    <div class="section">
-      <h3>Phiên đăng nhập Chrome</h3>
-      <p class="help-text">
-        Cho phép MyDM dùng phiên đăng nhập Chrome để tải file cần xác thực.
-        Chỉ bật cho website bạn tin tưởng.
-      </p>
-      <label class="field-label">
-        Website được cấp phiên (mỗi dòng một tên miền):
-        <textarea id="sessionSites" placeholder="drive.google.com&#10;dropbox.com" rows="3"></textarea>
-      </label>
-      <button id="grantCookies" class="btn-secondary">Cấp quyền cookie</button>
-      <button id="revokeCookies" class="btn-danger">Thu hồi quyền cookie</button>
-      <p id="cookieStatus" class="status-text"></p>
-    </div>
-
-    <hr />
-
-    <div class="section">
       <button id="save" class="btn-primary full-width">Lưu cấu hình</button>
-    </div>
+    </details>
 
     <p id="status" role="status" class="main-status"></p>
 

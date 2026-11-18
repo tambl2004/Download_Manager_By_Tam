@@ -29,6 +29,13 @@ pub struct Task {
     pub referer: Option<String>,
     #[serde(default)]
     pub content_disposition_name: Option<String>,
+    // v0.3 fields
+    #[serde(default)]
+    pub category: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub part_dones: Vec<u64>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

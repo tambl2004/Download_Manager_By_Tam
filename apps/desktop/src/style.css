@@ -1334,7 +1334,6 @@ body {
     color: #888888;
 }
 
-
 /* ===== DARK MODE SUPPORT ===== */
 .app.dark-mode {
     --bg: #1e1e1e;
@@ -1486,3 +1485,688 @@ body {
     border-color: #3c3c3c;
     color: #888888;
 }
+
+/* ===== DOWNLOAD FILE INFO DIALOG (IDM-STYLE v0.3) ===== */
+.download-info-dialog {
+    background: #f0f0f0;
+    border: 1px solid #7f9db9;
+    border-radius: 6px;
+    width: 580px;
+    max-width: 95vw;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    color: #000;
+    font-size: 12px;
+    overflow: hidden;
+}
+
+.dialog-title-bar {
+    background: linear-gradient(to bottom, #ffffff, #e3e6ea);
+    border-bottom: 1px solid #bfbfbf;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 10px;
+    font-weight: 600;
+    font-size: 12.5px;
+    user-select: none;
+}
+
+.dialog-title-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.dialog-title-icon {
+    width: 16px;
+    height: 16px;
+    object-fit: contain;
+}
+
+.dialog-title-controls {
+    display: flex;
+    align-items: center;
+}
+
+.dialog-ctrl-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    color: #555;
+    padding: 0 4px;
+    line-height: 1;
+}
+
+.dialog-ctrl-btn:hover {
+    color: #d9534f;
+}
+
+.dialog-body {
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.dialog-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.dialog-label {
+    width: 95px;
+    text-align: right;
+    font-size: 12px;
+    font-weight: 500;
+    color: #222;
+    flex-shrink: 0;
+}
+
+.dialog-field-wrapper {
+    flex: 1;
+    display: flex;
+}
+
+.dialog-field-with-btn {
+    display: flex;
+    flex: 1;
+    gap: 4px;
+}
+
+.dialog-input,
+.dialog-select {
+    width: 100%;
+    height: 25px;
+    padding: 2px 6px;
+    border: 1px solid #7f9db9;
+    border-radius: 2px;
+    background: #fff;
+    font-size: 12px;
+    font-family: inherit;
+    box-sizing: border-box;
+    color: #111;
+}
+
+.dialog-input:focus,
+.dialog-select:focus {
+    outline: none;
+    border-color: #0078d4;
+    box-shadow: 0 0 0 1px #0078d4;
+}
+
+.dialog-btn-small {
+    min-width: 25px;
+    height: 25px;
+    border: 1px solid #7f9db9;
+    background: linear-gradient(to bottom, #ffffff, #e6e6e6);
+    border-radius: 2px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 6px;
+    color: #222;
+}
+
+.dialog-btn-small:hover {
+    background: #e0f2fe;
+    border-color: #0078d4;
+}
+
+.dialog-mid-section {
+    display: flex;
+    gap: 12px;
+}
+
+.dialog-mid-left {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.dialog-mid-right {
+    width: 95px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #dcdcdc;
+    border-radius: 3px;
+    background: #fafafa;
+    padding: 6px;
+    flex-shrink: 0;
+}
+
+.dialog-file-preview {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    text-align: center;
+}
+
+.dialog-file-icon {
+    width: 44px;
+    height: 44px;
+    object-fit: contain;
+}
+
+.dialog-file-size {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #222;
+}
+
+.probing-text {
+    font-size: 10px;
+    color: #0078d4;
+    font-style: italic;
+}
+
+.unknown-size {
+    font-size: 10px;
+    color: #888;
+}
+
+.dialog-sub-row {
+    padding-left: 103px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.dialog-checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11.5px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.dialog-input-subfolder {
+    width: 100%;
+    height: 23px;
+    padding: 2px 6px;
+    border: 1px solid #d0d0d0;
+    background: #f7f7f7;
+    color: #555;
+    font-size: 11px;
+    border-radius: 2px;
+    box-sizing: border-box;
+}
+
+.dialog-footer {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    padding: 10px 14px 14px;
+    background: #f0f0f0;
+    border-top: 1px solid #e0e0e0;
+}
+
+.dialog-action-btn {
+    min-width: 96px;
+    height: 27px;
+    padding: 0 16px;
+    border: 1px solid #7f9db9;
+    background: linear-gradient(to bottom, #ffffff, #ececec);
+    border-radius: 3px;
+    font-size: 12px;
+    cursor: pointer;
+    color: #222;
+}
+
+.dialog-action-btn:hover {
+    background: #f0f8ff;
+    border-color: #0078d4;
+}
+
+.btn-primary-highlight {
+    border-color: #0078d4;
+    box-shadow: 0 0 0 1px #0078d4;
+    font-weight: 600;
+    background: linear-gradient(to bottom, #f0f8ff, #e3f2fd);
+}
+
+/* ===== DOWNLOAD PROGRESS WINDOW (IDM-STYLE v0.3 - Ảnh 1) ===== */
+.dl-progress-window {
+    width: 630px;
+    max-width: 95vw;
+    background: #f0f0f0;
+    border: 1px solid #7f9db9;
+    border-radius: 6px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    overflow: hidden;
+    color: #111;
+    font-size: 12px;
+}
+
+.dl-progress-window-title {
+    font-weight: 600;
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 480px;
+}
+
+.dl-progress-tabs {
+    display: flex;
+    background: #e1e4e8;
+    border-bottom: 1px solid #b0b8c2;
+    padding: 6px 8px 0;
+    gap: 4px;
+}
+
+.dl-tab-btn {
+    border: 1px solid #b0b8c2;
+    border-bottom: none;
+    background: #d8dde3;
+    padding: 5px 12px;
+    font-size: 11.5px;
+    cursor: pointer;
+    border-radius: 3px 3px 0 0;
+    color: #333;
+}
+
+.dl-tab-btn.active {
+    background: #f0f0f0;
+    font-weight: 600;
+    border-top: 2px solid #0078d4;
+    color: #000;
+}
+
+.dl-progress-content {
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.dl-url-box {
+    background: #ffffff;
+    border: 1px solid #7f9db9;
+    border-radius: 2px;
+    padding: 3px 6px;
+    font-size: 11.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: #333;
+}
+
+.dl-info-table {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.dl-info-row {
+    display: flex;
+    align-items: baseline;
+    font-size: 12px;
+}
+
+.dl-info-label {
+    width: 145px;
+    color: #333;
+    font-weight: 500;
+}
+
+.dl-info-val {
+    font-weight: 600;
+    color: #111;
+}
+
+.text-primary-status {
+    color: #005a9e;
+}
+
+.dl-main-progress-bar-wrapper {
+    width: 100%;
+    height: 18px;
+    background: #e4e7eb;
+    border: 1px solid #7f9db9;
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.dl-main-progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(to bottom, #4caf50, #2e7d32);
+    transition: width 0.3s ease;
+}
+
+.dl-progress-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 2px;
+}
+
+.dl-progress-actions-right {
+    display: flex;
+    gap: 8px;
+}
+
+.dl-btn-flat {
+    min-width: 86px;
+    height: 26px;
+    padding: 0 12px;
+    border: 1px solid #7f9db9;
+    background: linear-gradient(to bottom, #ffffff, #ececec);
+    border-radius: 3px;
+    font-size: 12px;
+    cursor: pointer;
+    color: #222;
+}
+
+.dl-btn-flat:hover {
+    background: #f0f8ff;
+    border-color: #0078d4;
+}
+
+.dl-connections-section {
+    margin-top: 4px;
+    border-top: 1px solid #d4d4d4;
+    padding-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.dl-connections-header {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #333;
+    text-align: center;
+}
+
+.dl-segments-graphic-bar {
+    width: 100%;
+    height: 14px;
+    background: #e4e7eb;
+    border: 1px solid #7f9db9;
+    border-radius: 2px;
+    display: flex;
+    overflow: hidden;
+}
+
+.dl-segment-chunk {
+    height: 100%;
+    border-right: 1px solid #8fa5ba;
+    background: #e6ebf2;
+    position: relative;
+    overflow: hidden;
+}
+
+.dl-segment-chunk:last-child {
+    border-right: none;
+}
+
+.dl-segment-fill {
+    height: 100%;
+    background: linear-gradient(to bottom, #2196f3, #1565c0);
+}
+
+.dl-connections-table-wrapper {
+    border: 1px solid #7f9db9;
+    background: #fff;
+    max-height: 130px;
+    overflow-y: auto;
+}
+
+.dl-connections-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11.5px;
+}
+
+.dl-connections-table th {
+    background: #e8ecf1;
+    border-bottom: 1px solid #c0c0c0;
+    padding: 3px 6px;
+    font-weight: 600;
+    text-align: left;
+}
+
+.dl-connections-table td {
+    border-bottom: 1px solid #f0f0f0;
+    padding: 2px 6px;
+}
+
+.dl-tab-pane {
+    padding: 8px 4px;
+}
+
+/* ===== DOWNLOAD COMPLETE WINDOW (IDM-STYLE v0.3 - Ảnh 2) ===== */
+.dl-complete-window {
+    width: 520px;
+    max-width: 95vw;
+    background: #f0f0f0;
+    border: 1px solid #7f9db9;
+    border-radius: 6px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    overflow: hidden;
+    color: #111;
+    font-size: 12px;
+}
+
+.dl-complete-body {
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.dl-complete-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.dl-complete-icon {
+    width: 48px;
+    height: 48px;
+    object-fit: contain;
+}
+
+.dl-complete-header-text {
+    display: flex;
+    flex-direction: column;
+}
+
+.dl-complete-title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 700;
+    color: #222;
+}
+
+.dl-complete-subtitle {
+    margin: 2px 0 0;
+    font-size: 12px;
+    color: #444;
+    font-weight: 500;
+}
+
+.dl-complete-field-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.dl-complete-label {
+    font-size: 11.5px;
+    font-weight: 500;
+    color: #333;
+}
+
+.dl-complete-actions {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    padding: 6px 0;
+}
+
+.dl-complete-footer-options {
+    border-top: 1px solid #e0e0e0;
+    padding-top: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* ==========================================================================
+   Delete Confirmation Dialog (IDM / Windows Style)
+   ========================================================================== */
+.delete-dialog-window {
+    width: 480px;
+    max-width: 95vw;
+    background: #f7f9fa;
+    border: 1px solid #707070;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+    border-radius: 6px;
+    overflow: hidden;
+    animation: modalPop 0.15s ease-out;
+}
+
+.delete-titlebar-icon {
+    font-size: 15px;
+    margin-right: 6px;
+}
+
+.delete-dialog-body {
+    padding: 16px 20px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.delete-dialog-top {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+}
+
+.delete-warning-icon {
+    font-size: 28px;
+    line-height: 1;
+}
+
+.delete-dialog-message {
+    font-size: 13px;
+    color: #222;
+    line-height: 1.4;
+    font-weight: 500;
+}
+
+.delete-task-name {
+    font-weight: 700;
+    color: #0b57d0;
+    margin-top: 4px;
+    word-break: break-all;
+    max-height: 40px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+.delete-options-box {
+    background: #ffffff;
+    border: 1px solid #dcdcdc;
+    border-radius: 4px;
+    padding: 10px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.delete-radio-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.delete-radio-option input[type="radio"] {
+    margin-top: 3px;
+    cursor: pointer;
+}
+
+.delete-option-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.option-title {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #222;
+}
+
+.option-title-danger {
+    color: #c0392b;
+}
+
+.option-desc {
+    font-size: 11.5px;
+    color: #666;
+}
+
+.text-danger {
+    color: #d32f2f;
+}
+
+.delete-dialog-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 10px 20px 14px;
+    background: #eceff1;
+    border-top: 1px solid #dcdcdc;
+}
+
+.delete-btn-confirm {
+    padding: 6px 18px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #fff;
+    background: linear-gradient(to bottom, #d32f2f, #b71c1c);
+    border: 1px solid #9a1010;
+    border-radius: 3px;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+.delete-btn-confirm:hover {
+    background: linear-gradient(to bottom, #e53935, #c62828);
+}
+
+.delete-btn-cancel {
+    padding: 6px 16px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #333;
+    background: linear-gradient(to bottom, #ffffff, #f0f0f0);
+    border: 1px solid #adadad;
+    border-radius: 3px;
+    cursor: pointer;
+}
+
+.delete-btn-cancel:hover {
+    background: #e5e5e5;
+}
+
+

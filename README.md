@@ -1,6 +1,4 @@
-# MyDM 0.2 cho Windows
-
-Mã nguồn phiên bản 0.2 có giao diện lấy cảm hứng từ IDM (menu, toolbar, sidebar phân loại, bảng dữ liệu, context menu, detail panel), desktop Tauri 2, engine Rust đa luồng, SQLite WAL, native messaging host v2 và extension Chrome Manifest V3. Không có tính năng thu tiền, activation hay bản quyền. Không sao chép tài nguyên độc quyền của IDM.
+# MyDM 0.3 cho Windows
 
 ## 1. Chuẩn bị môi trường Windows 11
 
@@ -35,11 +33,9 @@ npm ci
 npm run tauri -- dev
 ```
 
-### Sử dụng giao diện MyDM (IDM-style)
-- **Thêm URL**: Nhấn biểu tượng `➕ Thêm URL` trên thanh công cụ hoặc phím tắt Enter trong hộp thoại để dán liên kết HTTP/HTTPS. Tên tệp có thể để trống để ứng dụng tự động nhận diện từ `Content-Disposition` (RFC 5987 / fallback) hoặc URL path.
-- **Thao tác tải**: `▶️ Tải tiếp`, `⏸️ Dừng`, `⏹️ Dừng tất cả`, `🗑️ Xóa lịch sử`, `🔄 Tải lại từ đầu`, `📂 Mở thư mục`. Nhấp chuột phải vào dòng dữ liệu để mở Context Menu.
-- **Cây thể loại bên trái**: Phân loại theo loại tệp (Dữ liệu nén, Tài liệu, Âm nhạc, Chương trình, Video, Hình ảnh) và theo trạng thái (Đang tải, Đã tải xong, Hàng đợi, Tạm dừng, Chờ xác nhận, Có lỗi).
-- **Tùy chọn (Cài đặt)**: Cấu hình thư mục lưu mặc định, số tệp tải đồng thời (1–6, mặc định 2), số kết nối mỗi tệp (1–8, mặc định 4) và giới hạn tốc độ theo đơn vị `KiB/s` (0 là không giới hạn).
+### Giao diện demo
+
+![Giao diện MyDM](apps/desktop/public/images/app.png)
 
 ## 3. Đóng gói bản Portable (Tạo file EXE)
 
@@ -53,7 +49,25 @@ Kết quả đóng gói nằm tại thư mục `release\MyDM\`:
 - `release\MyDM\chrome-extension\`: Tiện ích mở rộng Chrome MV3.
 - `release\MyDM\install-host.ps1` và `uninstall-host.ps1`: Script đăng ký và gỡ bỏ host trong Registry người dùng hiện tại (HKCU).
 
-## 4. Tích hợp bắt link Chrome (Phiên bản 0.2)
+## 4. Tích hợp bắt link & tải video Chrome (Phiên bản 0.3)
+
+### Tính năng mới v0.3:
+1. **Toàn quyền truy cập mọi website (`<all_urls>`)**: Extension tự động nhận diện liên kết tải và luồng video/audio trên mọi trang web mà không cần cấp quyền thủ công từng domain.
+2. **Nút nổi "Tải video này" (Floating Video Download Button)**: Tự động hiển thị ở góc trên trình phát video (YouTube, Facebook, web phim, web nhạc...). Nhấp vào nút mở menu lựa chọn đa chất lượng (1080p HD, 720p HD, 480p, MKV, MP4, phụ đề TTML/VTT) và "Tải xuống tất".
+3. **Hộp thoại "Thông tin tệp tin tải xuống" (Download File Info)**:
+   - Tự động phân loại nhóm thông minh (*Video, Âm nhạc, Dữ liệu nén, Tài liệu, Chương trình, Chung*).
+   - Tự động chọn thư mục lưu theo nhóm, kèm nút `[...]` duyệt thư mục và checkbox ghi nhớ.
+   - Thăm dò kích thước file thực tế (Pre-probe) trước khi tải và hiển thị icon tệp trực quan.
+   - 3 nút: *Sẽ tải sau*, *Bắt đầu tải*, *Hủy bỏ*.
+4. **Cửa sổ "Tiến trình tải xuống đa luồng" (Download Progress Window)**:
+   - Thanh đồ họa phân đoạn (visual graphic segment bar) và bảng phân luồng thể hiện tiến trình thời gian thực của từng kết nối song song.
+   - Hiển thị tốc độ tải, ETA, hỗ trợ tạm dừng/tiếp tục.
+5. **Hộp thoại "Đã tải xong" (Download Complete Dialog)**:
+   - Hiển thị khi file tải và ghép hoàn tất.
+   - Hỗ trợ 4 nút: *Mở* (Open), *Mở bằng...* (Open with), *Mở thư mục* (Explorer select), *Đóng*.
+6. **Hộp thoại "Xác nhận xóa tệp tin" (Delete Confirmation Dialog)**:
+   - Thay thế hoàn toàn popup trình duyệt `window.confirm` (`localhost:1420`).
+   - Cung cấp 2 lựa chọn: *Chỉ xóa khỏi danh sách MyDM* (giữ an toàn tệp trong máy) hoặc *Xóa cả trong danh sách và xóa vĩnh viễn tệp trong thư mục*.
 
 ### Bước 1: Cài đặt Chrome Extension
 1. Mở Chrome, truy cập `chrome://extensions/`.

@@ -1,197 +1,153 @@
-const status = document.getElementById("status");
+const statusEl = document.getElementById("status");
+const masterToggle = document.getElementById("masterToggle");
+const hostIndicator = document.getElementById("hostIndicator");
+const hostStatusText = document.getElementById("hostStatusText");
+const diagVersion = document.getElementById("diag-version");
+const pingBtn = document.getElementById("ping");
 const modeRadios = document.querySelectorAll('input[name="mode"]');
-const allowDomains = document.getElementById("allowDomains");
 const blockDomains = document.getElementById("blockDomains");
-const allowSubdomains = document.getElementById("allowSubdomains");
 const sessionSites = document.getElementById("sessionSites");
 const cookieStatus = document.getElementById("cookieStatus");
-const diagDiv = document.getElementById("diagnostics");
-const diagHost = document.getElementById("diag-host");
-const diagVersion = document.getElementById("diag-version");
+const saveBtn = document.getElementById("save");
 
-// Load saved settings
-chrome.storage.local
-  .get([
-    "mode",
-    "allowDomains",
-    "blockDomains",
-    "allowSubdomains",
-    "sessionSites",
-    "status",
-  ])
-  .then((s) => {
-    const mode = s.mode || "off";
-    modeRadios.forEach((r) => {
-      r.checked = r.value === mode;
-    });
-    allowDomains.value = s.allowDomains || "";
-    blockDomains.value = s.blockDomains || "";
-    allowSubdomains.checked = !!s.allowSubdomains;
-    sessionSites.value = s.sessionSites?.join("\n") || "";
-    status.textContent = s.status || "Chưa kiểm tra kết nối.";
-
-    // Check cookie permission status
-    updateCookieStatus();
-  });
-
-// Save button
-document.getElementById("save").onclick = async () => {
-  const mode = [...modeRadios].find((r) => r.checked)?.value || "off";
-  const sessions = sessionSites.value
-    .split(/[\n,]+/)
-    .map((v) => v.trim().toLowerCase())
-    .filter(Boolean);
-
-  await chrome.storage.local.set({
-    mode,
-    allowDomains: allowDomains.value,
-    blockDomains: blockDomains.value,
-    allowSubdomains: allowSubdomains.checked,
-    sessionSites: sessions,
-    // Keep backward compat fields
-    automatic: mode === "auto",
-    domains: allowDomains.value,
-  });
-
-  status.textContent =
-    "Đã lưu. Tên miền phải khớp chính xác (trừ khi bật tên miền phụ).";
-  status.className = "main-status success";
-};
-
-// Ping / diagnostics
-document.getElementById("ping").onclick = async () => {
-  diagDiv.style.display = "block";
-  diagHost.textContent = "Đang kiểm tra…";
-  diagHost.className = "diag-status checking";
-  diagVersion.textContent = "…";
-
-  try {
-    const r = await chrome.runtime.sendMessage({ op: "ping" });
-    if (r?.ok) {
-      diagHost.textContent = "✓ Hoạt động";
-      diagHost.className = "diag-status ok";
-      diagVersion.textContent = `v${r.hostVersion || "?"}`;
-      status.textContent =
-        "Native host hoạt động. Mở MyDM để xử lý hàng đợi.";
-      status.className = "main-status success";
-
-      if (r.hostVersion && r.hostVersion < 2) {
-        status.textContent +=
-          " ⚠ Phiên bản host cũ (v1). Cập nhật mydm-native-host.exe để dùng phiên đăng nhập.";
-        status.className = "main-status warning";
-      }
-    } else {
-      diagHost.textContent = "✕ Lỗi: " + (r?.error || "Không phản hồi");
-      diagHost.className = "diag-status error";
-      status.textContent = r?.error || "Không có phản hồi";
-      status.className = "main-status error";
-    }
-  } catch (e) {
-    diagHost.textContent = "✕ " + String(e);
-    diagHost.className = "diag-status error";
-    status.textContent = String(e);
-    status.className = "main-status error";
-
-    // Provide actionable guidance
-    if (String(e).includes("not found") || String(e).includes("Specified native messaging host")) {
-      status.textContent +=
-        "\n→ Kiểm tra: ID extension đúng chưa? Đã chạy install-host.ps1? Đường dẫn EXE còn đúng?";
-    }
-  }
-};
-
-// Grant cookies permission
-document.getElementById("grantCookies").onclick = async () => {
-  const sites = sessionSites.value
-    .split(/[\n,]+/)
-    .map((v) => v.trim().toLowerCase())
-    .filter(Boolean);
-
-  if (sites.length === 0) {
-    cookieStatus.textContent =
-      "Nhập ít nhất một tên miền trước khi cấp quyền.";
-    cookieStatus.className = "status-text warning";
-    return;
-  }
-
-  const origins = sites.flatMap((s) => [
-    `https://${s}/*`,
-    `http://${s}/*`,
-  ]);
-
-  try {
-    const r = await chrome.runtime.sendMessage({
-      op: "requestCookiePermission",
-      origins,
-    });
-    if (r?.ok) {
-      cookieStatus.textContent = `Đã cấp quyền cookie cho: ${sites.join(", ")}`;
-      cookieStatus.className = "status-text success";
-    } else {
-      cookieStatus.textContent = "Người dùng từ chối hoặc lỗi quyền.";
-      cookieStatus.className = "status-text error";
-    }
-  } catch (e) {
-    cookieStatus.textContent = String(e);
-    cookieStatus.className = "status-text error";
-  }
-  updateCookieStatus();
-};
-
-// Revoke cookies permission
-document.getElementById("revokeCookies").onclick = async () => {
-  const sites = sessionSites.value
-    .split(/[\n,]+/)
-    .map((v) => v.trim().toLowerCase())
-    .filter(Boolean);
-
-  const origins = sites.flatMap((s) => [
-    `https://${s}/*`,
-    `http://${s}/*`,
-  ]);
-
-  try {
-    const r = await chrome.runtime.sendMessage({
-      op: "revokeSitePermission",
-      origins,
-    });
-    if (r?.ok) {
-      cookieStatus.textContent = "Đã thu hồi quyền.";
-      cookieStatus.className = "status-text success";
-    } else {
-      cookieStatus.textContent = "Không thu hồi được.";
-      cookieStatus.className = "status-text error";
-    }
-  } catch (e) {
-    cookieStatus.textContent = String(e);
-    cookieStatus.className = "status-text error";
-  }
-  updateCookieStatus();
-};
-
-async function updateCookieStatus() {
-  try {
-    const r = await chrome.runtime.sendMessage({ op: "checkPermissions" });
-    if (r?.ok) {
-      const grantBtn = document.getElementById("grantCookies");
-      const revokeBtn = document.getElementById("revokeCookies");
-      if (r.hasCookies) {
-        grantBtn.style.display = "none";
-        revokeBtn.style.display = "inline-block";
-        if (!cookieStatus.textContent) {
-          cookieStatus.textContent = "Quyền cookie: đã cấp.";
-          cookieStatus.className = "status-text success";
+// Check Native Host connection
+async function checkHostConnection() {
+    hostIndicator.className = "status-dot yellow";
+    hostStatusText.textContent = "Đang kiểm tra...";
+    try {
+        const r = await chrome.runtime.sendMessage({ op: "ping" });
+        if (r?.ok) {
+            hostIndicator.className = "status-dot green";
+            hostStatusText.textContent = "✓ Đã kết nối với MyDM Desktop";
+            diagVersion.textContent = `v${r.hostVersion || 2}`;
+        } else {
+            hostIndicator.className = "status-dot red";
+            hostStatusText.textContent = "✕ Host không phản hồi";
+            diagVersion.textContent = "—";
         }
-      } else {
-        grantBtn.style.display = "inline-block";
-        revokeBtn.style.display = "none";
-        if (!cookieStatus.textContent) {
-          cookieStatus.textContent = "Quyền cookie: chưa cấp.";
-          cookieStatus.className = "status-text";
-        }
-      }
+    } catch (e) {
+        hostIndicator.className = "status-dot red";
+        hostStatusText.textContent = "✕ Chưa kết nối Native Host";
+        diagVersion.textContent = "—";
     }
-  } catch {
-    // ignore
-  }
 }
+
+// Load settings
+chrome.storage.local
+    .get(["mode", "blockDomains", "sessionSites", "enabled"])
+    .then((s) => {
+        const isEnabled = s.enabled !== undefined ? !!s.enabled : s.mode !== "off";
+        const mode = s.mode || (isEnabled ? "auto" : "off");
+        masterToggle.checked = isEnabled;
+
+        modeRadios.forEach((r) => {
+            r.checked = r.value === mode;
+        });
+
+        blockDomains.value = s.blockDomains || "";
+        sessionSites.value = s.sessionSites?.join("\n") || "";
+
+        checkHostConnection();
+    });
+
+function broadcastEnabled(isEnabled) {
+    try {
+        chrome.tabs.query({}, (tabs) => {
+            for (const t of tabs) {
+                if (t.id) {
+                    chrome.tabs.sendMessage(t.id, {
+                        type: "MYDM_TOGGLE_ENABLED",
+                        enabled: isEnabled,
+                    }).catch(() => {});
+                }
+            }
+        });
+    } catch {}
+}
+
+// Master toggle switch
+masterToggle.addEventListener("change", async () => {
+    const isEnabled = masterToggle.checked;
+    const newMode = isEnabled ? "auto" : "off";
+    modeRadios.forEach((r) => {
+        r.checked = r.value === newMode;
+    });
+
+    await chrome.storage.local.set({ mode: newMode, automatic: isEnabled, enabled: isEnabled });
+    statusEl.textContent = isEnabled
+        ? "Đã bật tự động bắt link và video."
+        : "Đã tắt. Chỉ bắt link bằng chuột phải.";
+    statusEl.className = "main-status success";
+    broadcastEnabled(isEnabled);
+});
+
+// Mode radios
+modeRadios.forEach((r) => {
+    r.addEventListener("change", async () => {
+        const mode = r.value;
+        const isEnabled = mode !== "off";
+        masterToggle.checked = isEnabled;
+        await chrome.storage.local.set({ mode, automatic: isEnabled, enabled: isEnabled });
+        statusEl.textContent = isEnabled
+            ? "Đã lưu chế độ."
+            : "Đã tắt. Chỉ bắt link bằng chuột phải.";
+        statusEl.className = "main-status success";
+        broadcastEnabled(isEnabled);
+    });
+});
+
+// Ping button
+pingBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    checkHostConnection();
+});
+
+// Save advanced settings
+if (saveBtn) {
+    saveBtn.addEventListener("click", async () => {
+        const mode = [...modeRadios].find((r) => r.checked)?.value || "auto";
+        masterToggle.checked = mode !== "off";
+
+        const sessions = sessionSites.value
+            .split(/[\n,]+/)
+            .map((v) => v.trim().toLowerCase())
+            .filter(Boolean);
+
+        await chrome.storage.local.set({
+            mode,
+            blockDomains: blockDomains.value,
+            sessionSites: sessions,
+            automatic: mode === "auto",
+        });
+
+        statusEl.textContent = "Đã lưu cài đặt.";
+        statusEl.className = "main-status success";
+    });
+}
+
+// Cookie permissions
+document.getElementById("grantCookies")?.addEventListener("click", async () => {
+    try {
+        const granted = await chrome.permissions.request({ permissions: ["cookies"] });
+        if (granted) {
+            cookieStatus.textContent = "✓ Đã cấp quyền cookie.";
+            cookieStatus.style.color = "#107c10";
+        }
+    } catch (e) {
+        cookieStatus.textContent = "✕ " + String(e);
+        cookieStatus.style.color = "#d13438";
+    }
+});
+
+document.getElementById("revokeCookies")?.addEventListener("click", async () => {
+    try {
+        const removed = await chrome.permissions.remove({ permissions: ["cookies"] });
+        if (removed) {
+            cookieStatus.textContent = "✓ Đã thu hồi quyền cookie.";
+            cookieStatus.style.color = "#107c10";
+        }
+    } catch (e) {
+        cookieStatus.textContent = "✕ " + String(e);
+        cookieStatus.style.color = "#d13438";
+    }
+});
